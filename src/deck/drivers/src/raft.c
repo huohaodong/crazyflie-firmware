@@ -31,7 +31,7 @@ static void raftRxTask() {
         case RAFT_APPEND_ENTRIES:
         case RAFT_APPEND_ENTRIES_REPLY:
         default:DEBUG_PRINT("raftRxTask: %u received unknown raft message type = %u.\n",
-                            uwbGetAddress(),
+                            raftNode.me,
                             type);
       }
     }
@@ -43,6 +43,7 @@ void raftInit() {
   xSemaphoreCreateMutex();
   rxQueue = xQueueCreate(RAFT_RX_QUEUE_SIZE, RAFT_RX_QUEUE_ITEM_SIZE);
   raftNode.mu = xSemaphoreCreateMutex();
+  raftNode.me = uwbGetAddress();
 //  raftNode.peerNodes = ? TODO: init peer
   raftNode.voteCount = 0;
   raftNode.currentState = RAFT_STATE_FOLLOWER;
@@ -52,7 +53,7 @@ void raftInit() {
   raftNode.log.size = 1;
   raftNode.commitIndex = 0;
   raftNode.lastApplied = 0;
-  for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_COUNT_MAX; i++) {
+  for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
     raftNode.nextIndex[i] = raftNode.log.items[raftNode.log.size - 1].index + 1;
     raftNode.matchIndex[i] = 0;
   }
@@ -70,8 +71,21 @@ void raftInit() {
               ADHOC_DECK_TASK_PRI, &raftRxTaskHandle);
 }
 
-void raftSendRequestVote(UWB_Address_t address, Raft_Request_Vote_Args_t *args) {
-//  TODO
+// TODO: leader broadcasting, follower uni-casting
+void raftSendRequestVote(UWB_Address_t address) {
+  UWB_Data_Packet_t dataTxPacket;
+  dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
+  dataTxPacket.header.srcAddress = raftNode.me;
+  dataTxPacket.header.destAddress = address;
+  dataTxPacket.header.ttl = 10;
+  dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Request_Vote_Args_t);
+  Raft_Request_Vote_Args_t *args = (Raft_Request_Vote_Args_t *) &dataTxPacket.payload;
+  args->type = RAFT_REQUEST_VOTE;
+  args->term = raftNode.currentTerm;
+  args->candidateId = raftNode.me;
+  args->lastLogIndex = raftNode.log.items[raftNode.log.size - 1].index;
+  args->lastLogTerm = raftNode.log.items[raftNode.log.size - 1].term;
+  uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessRequestVote(Raft_Request_Vote_Args_t *args) {
@@ -82,8 +96,28 @@ void raftProcessRequestVoteReply(Raft_Request_Vote_Reply_t *reply) {
 //  TODO
 }
 
-void raftSendAppendEntries(UWB_Address_t address, Raft_Append_Entries_Args_t *args) {
-//  TODO
+void raftSendAppendEntries(UWB_Address_t address) {
+  UWB_Data_Packet_t dataTxPacket;
+  dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
+  dataTxPacket.header.srcAddress = raftNode.me;
+  dataTxPacket.header.destAddress = address;
+  dataTxPacket.header.ttl = 10;
+  dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Append_Entries_Args_t);
+  Raft_Append_Entries_Args_t *args = (Raft_Append_Entries_Args_t *) &dataTxPacket.payload;
+  args->type = RAFT_APPEND_ENTRIES;
+  args->term = raftNode.currentTerm;
+  args->leaderId = raftNode.me;
+  args->prevLogIndex = raftNode.log.items[raftNode.nextIndex[address] - 1].index;
+  args->prevLogTerm = raftNode.log.items[raftNode.nextIndex[address] - 1].term;
+  args->entryCount = 0;
+  // TODO: check
+  int startIndex = MAX(0, raftNode.nextIndex[address] - RAFT_LOG_ENTRIES_SIZE_MAX);
+  for (int i = startIndex; i < raftNode.nextIndex[address]; i++) {
+    args->entries[args->entryCount] = raftNode.log.items[i];
+    args->entryCount++;
+  }
+  args->leaderCommit = raftNode.commitIndex;
+  uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessAppendEntries(Raft_Append_Entries_Reply_t *args) {
