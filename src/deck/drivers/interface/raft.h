@@ -92,9 +92,11 @@ typedef struct {
 void raftInit();
 void raftSendRequestVote(UWB_Address_t address);
 void raftProcessRequestVote(Raft_Request_Vote_Args_t *args);
+void raftSendRequestVoteReply(UWB_Address_t address, uint16_t term, bool voteGranted);
 void raftProcessRequestVoteReply(Raft_Request_Vote_Reply_t *reply);
 void raftSendAppendEntries(UWB_Address_t address);
 void raftProcessAppendEntries(Raft_Append_Entries_Reply_t *args);
+void raftSendAppendEntriesReply(UWB_Address_t address, uint16_t term, bool success);
 void raftProcessAppendEntriesReply(Raft_Append_Entries_Reply_t *reply);
 
 #endif

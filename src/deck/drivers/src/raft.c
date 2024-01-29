@@ -3,8 +3,8 @@
 #include "debug.h"
 
 #ifndef RAFT_DEBUG_ENABLE
-  #undef DEBUG_PRINT
-  #define DEBUG_PRINT
+#undef DEBUG_PRINT
+#define DEBUG_PRINT
 #endif
 
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -18,6 +18,13 @@ static Raft_Log_Item_t EMPTY_LOG_ITEM = {
     .index = 0,
     .command = "NULL"
 };
+
+static void convertToFollower(Raft_Node_t *node) {
+  node->currentState = RAFT_STATE_FOLLOWER;
+  node->voteFor = RAFT_VOTE_FOR_NO_ONE;
+  node->voteCount = 0;
+  node->lastHeartbeatTime = xTaskGetTickCount();
+}
 
 static void raftRxTask() {
   UWB_Data_Packet_t dataRxPacket;
@@ -85,11 +92,66 @@ void raftSendRequestVote(UWB_Address_t address) {
   args->candidateId = raftNode.me;
   args->lastLogIndex = raftNode.log.items[raftNode.log.size - 1].index;
   args->lastLogTerm = raftNode.log.items[raftNode.log.size - 1].term;
+  DEBUG_PRINT("raftSendRequestVote: %u send request vote to %u.\n", raftNode.me, address);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 
+// TODO: check
 void raftProcessRequestVote(Raft_Request_Vote_Args_t *args) {
-//  TODO
+  DEBUG_PRINT("raftProcessRequestVote: %u received vote request from %u.\n", raftNode.me, args->candidateId);
+  if (args->term < raftNode.currentTerm) {
+    DEBUG_PRINT("raftProcessRequestVote: Candidate term = %u < my term = %u, ignore.\n",
+                args->term,
+                raftNode.currentTerm);
+    raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, false);
+    return;
+  }
+  if (args->term > raftNode.currentTerm) {
+    DEBUG_PRINT("raftProcessRequestVote: Candidate term = %u > my term = %u, convert to follower.\n",
+                args->term,
+                raftNode.currentTerm
+    );
+    raftNode.currentTerm = args->term;
+    convertToFollower(&raftNode);
+  }
+  if (raftNode.voteFor != RAFT_VOTE_FOR_NO_ONE && raftNode.voteFor != args->candidateId) {
+    DEBUG_PRINT("raftProcessRequestVote: I %u have already granted vote to %u this term, don't grant vote.\n",
+                raftNode.me,
+                raftNode.voteFor);
+    raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, false);
+    return;
+  }
+  Raft_Log_Item_t lastLog = raftNode.log.items[raftNode.log.size - 1];
+  if (args->lastLogTerm < lastLog.term || (args->lastLogTerm == lastLog.term && args->lastLogIndex < lastLog.index)) {
+    DEBUG_PRINT("raftProcessRequestVote: My %u local log entries are more up-to-date than %u, don't grant vote.\n",
+                raftNode.me,
+                args->candidateId);
+    raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, false);
+    return;
+  }
+  raftNode.voteFor = args->candidateId;
+  raftNode.lastHeartbeatTime = xTaskGetTickCount();
+  DEBUG_PRINT("raftProcessRequestVote: %u grant vote to %u.\n", raftNode.me, args->candidateId);
+  raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, true);
+}
+
+void raftSendRequestVoteReply(UWB_Address_t address, uint16_t term, bool voteGranted) {
+  UWB_Data_Packet_t dataTxPacket;
+  dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
+  dataTxPacket.header.srcAddress = raftNode.me;
+  dataTxPacket.header.destAddress = address;
+  dataTxPacket.header.ttl = 10;
+  dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Request_Vote_Reply_t);
+  Raft_Request_Vote_Reply_t *reply = (Raft_Request_Vote_Reply_t *) &dataTxPacket.payload;
+  reply->type = RAFT_REQUEST_VOTE_REPLY;
+  reply->term = term;
+  reply->voteGranted = voteGranted;
+  DEBUG_PRINT("raftSendRequestVoteReply: %u send vote reply to %u, term = %u, granted = %d.\n",
+              raftNode.me,
+              address,
+              term,
+              voteGranted);
+  uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessRequestVoteReply(Raft_Request_Vote_Reply_t *reply) {
@@ -117,10 +179,15 @@ void raftSendAppendEntries(UWB_Address_t address) {
     args->entryCount++;
   }
   args->leaderCommit = raftNode.commitIndex;
+  DEBUG_PRINT("raftSendAppendEntries: %u send append entries to %u.\n", raftNode.me, address);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessAppendEntries(Raft_Append_Entries_Reply_t *args) {
+//  TODO
+}
+
+void raftSendAppendEntriesReply(UWB_Address_t address, uint16_t term, bool success) {
 //  TODO
 }
 
