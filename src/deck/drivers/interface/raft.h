@@ -48,7 +48,15 @@ typedef struct {
   Time_t lastHeartbeatTime; /* heartbeat used for trigger leader election */
 } Raft_Node_t;
 
+typedef enum {
+  RAFT_REQUEST_VOTE,
+  RAFT_REQUEST_VOTE_REPLY,
+  RAFT_APPEND_ENTRIES,
+  RAFT_APPEND_ENTRIES_REPLY
+} RAFT_MESSAGE_TYPE;
+
 typedef struct {
+  RAFT_MESSAGE_TYPE type;
   uint16_t term; /* candidate's term */
   UWB_Address_t candidateId; /* candidate that requesting vote */
   uint16_t lastLogIndex; /* index of candidate's last log entry */
@@ -56,6 +64,7 @@ typedef struct {
 } __attribute__((packed)) Raft_Request_Vote_Args_t;
 
 typedef struct {
+  RAFT_MESSAGE_TYPE type;
   uint16_t term; /* currentTerm, for candidate to update itself */
   bool voteGranted; /* true means candidate received vote */
 } __attribute__((packed)) Raft_Request_Vote_Reply_t;
@@ -63,6 +72,7 @@ typedef struct {
 #define RAFT_LOG_ENTRIES_SIZE_MAX ((ROUTING_DATA_PACKET_PAYLOAD_SIZE_MAX - 8) / sizeof (Raft_Log_t))
 
 typedef struct {
+  RAFT_MESSAGE_TYPE type;
   uint16_t term; /* leader's term */
   UWB_Address_t leaderId; /* so follower can redirect clients */
   uint16_t prevLogIndex; /* index of log entry immediately preceding new ones */
@@ -72,14 +82,17 @@ typedef struct {
 } __attribute__((packed)) Raft_Append_Entries_Args_t;
 
 typedef struct {
+  RAFT_MESSAGE_TYPE type;
   uint16_t term; /* currentTerm, for leader to update itself */
   bool success; /* true if follower contained entry matching prevLogIndex and prevLogTerm */
 } __attribute__((packed)) Raft_Append_Entries_Reply_t;
 
 void raftInit();
 void raftSendRequestVote(UWB_Address_t address, Raft_Request_Vote_Args_t *args);
+void raftProcessRequestVote(Raft_Request_Vote_Args_t *args);
 void raftProcessRequestVoteReply(Raft_Request_Vote_Reply_t *reply);
 void raftSendAppendEntries(UWB_Address_t address, Raft_Append_Entries_Args_t *args);
+void raftProcessAppendEntries(Raft_Append_Entries_Reply_t *args);
 void raftProcessAppendEntriesReply(Raft_Append_Entries_Reply_t *reply);
 
 #endif
