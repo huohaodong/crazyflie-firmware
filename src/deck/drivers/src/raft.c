@@ -335,7 +335,7 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
   raftNode.lastHeartbeatTime = xTaskGetTickCount();
   raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, true);
 }
-
+// TODO: check
 void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool success) {
   UWB_Data_Packet_t dataTxPacket;
   dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
@@ -354,7 +354,35 @@ void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool s
               success);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
-
+// TODO: check
 void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entries_Reply_t *reply) {
   DEBUG_PRINT("raftProcessAppendEntriesReply: %u received append entries reply from %u.\n", raftNode.me, peerAddress);
+  if (reply->term < raftNode.currentTerm) {
+    DEBUG_PRINT("raftProcessAppendEntriesReply: Peer term = %u < my term = %u, ignore.\n",
+                reply->term,
+                raftNode.currentTerm);
+
+    return;
+  }
+  /* If RPC request or response contains term T > currentTerm, set currentTerm = T, convert to follower. */
+  if (reply->term > raftNode.currentTerm) {
+    DEBUG_PRINT("raftProcessAppendEntriesReply: Peer term = %u > my term = %u, convert to follower.\n",
+                reply->term,
+                raftNode.currentTerm
+    );
+    raftNode.currentTerm = reply->term;
+    convertToFollower(&raftNode);
+  }
+  if (reply->success) {
+    // TODO: add info in messages to update match index and next index.
+//    raftNode.matchIndex[peerAddress] = ?
+//    raftNode.nextIndex[peerAddress] = ?
+    /* If there exists an N such that N > commitIndex, a majority of matchIndex[i] ≥ N,
+     * and log[N].term == currentTerm: set commitIndex = N
+     */
+    // TODO: update commit index and apply index.
+  } else {
+    /* If AppendEntries fails because of log inconsistency: decrement nextIndex and retry. */
+    // TODO: sendAppendEntries && backward log index term by term
+  }
 }
