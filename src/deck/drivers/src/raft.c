@@ -337,7 +337,22 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
 }
 
 void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool success) {
-//  TODO
+  UWB_Data_Packet_t dataTxPacket;
+  dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
+  dataTxPacket.header.srcAddress = raftNode.me;
+  dataTxPacket.header.destAddress = peerAddress;
+  dataTxPacket.header.ttl = 10;
+  dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Append_Entries_Reply_t);
+  Raft_Append_Entries_Reply_t *reply = (Raft_Append_Entries_Reply_t *) &dataTxPacket.payload;
+  reply->type = RAFT_APPEND_ENTRIES_REPLY;
+  reply->term = term;
+  reply->success = success;
+  DEBUG_PRINT("raftSendAppendEntriesReply: %u send vote reply to %u, term = %u, success = %d.\n",
+              raftNode.me,
+              peerAddress,
+              term,
+              success);
+  uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entries_Reply_t *reply) {
