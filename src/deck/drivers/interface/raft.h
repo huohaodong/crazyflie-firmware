@@ -90,6 +90,7 @@ typedef struct {
 } __attribute__((packed)) Raft_Append_Entries_Reply_t;
 
 void raftInit();
+void raftNodeInit(Raft_Node_t *node);
 void raftSendRequestVote(UWB_Address_t peerAddress);
 void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t *args);
 void raftSendRequestVoteReply(UWB_Address_t peerAddress, uint16_t term, bool voteGranted);
