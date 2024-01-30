@@ -35,10 +35,10 @@ static void raftRxTask() {
     if (uwbReceiveDataPacketBlock(UWB_DATA_MESSAGE_RAFT, &dataRxPacket)) {
       uint8_t type = dataRxPacket.payload[0];
       switch (type) {
-        case RAFT_REQUEST_VOTE:
-        case RAFT_REQUEST_VOTE_REPLY:
-        case RAFT_APPEND_ENTRIES:
-        case RAFT_APPEND_ENTRIES_REPLY:
+        case RAFT_REQUEST_VOTE:raftProcessRequestVote((Raft_Request_Vote_Args_t *) dataRxPacket.payload);
+        case RAFT_REQUEST_VOTE_REPLY: raftProcessRequestVoteReply((Raft_Request_Vote_Reply_t *) dataRxPacket.payload);
+        case RAFT_APPEND_ENTRIES: raftProcessAppendEntries((Raft_Append_Entries_Args_t *) dataRxPacket.payload);
+        case RAFT_APPEND_ENTRIES_REPLY:raftProcessAppendEntriesReply((Raft_Append_Entries_Reply_t *) dataRxPacket.payload);
         default:DEBUG_PRINT("raftRxTask: %u received unknown raft message type = %u.\n",
                             raftNode.me,
                             type);
@@ -187,7 +187,7 @@ void raftSendAppendEntries(UWB_Address_t address) {
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 
-void raftProcessAppendEntries(Raft_Append_Entries_Reply_t *args) {
+void raftProcessAppendEntries(Raft_Append_Entries_Args_t *args) {
 //  TODO
 }
 
