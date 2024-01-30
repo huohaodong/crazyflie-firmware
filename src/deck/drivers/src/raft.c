@@ -22,7 +22,9 @@ static Raft_Log_Item_t EMPTY_LOG_ITEM = {
 static void convertToFollower(Raft_Node_t *node) {
   node->currentState = RAFT_STATE_FOLLOWER;
   node->voteFor = RAFT_VOTE_FOR_NO_ONE;
-  node->voteCount = 0;
+  for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
+    node->peerVote[i] = false;
+  }
   node->lastHeartbeatTime = xTaskGetTickCount();
 }
 
@@ -52,7 +54,9 @@ void raftInit() {
   raftNode.mu = xSemaphoreCreateMutex();
   raftNode.me = uwbGetAddress();
 //  raftNode.peerNodes = ? TODO: init peer
-  raftNode.voteCount = 0;
+  for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
+    raftNode.peerVote[i] = false;
+  }
   raftNode.currentState = RAFT_STATE_FOLLOWER;
   raftNode.currentTerm = 0;
   raftNode.voteFor = RAFT_VOTE_FOR_NO_ONE;

@@ -37,7 +37,7 @@ typedef struct {
   SemaphoreHandle_t mu;
   UWB_Address_t me;
   UWB_Address_t peerNodes[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX]; /* peer nodes in current raft cluster configuration */
-  uint8_t voteCount; /* granted vote count from peer nodes in current term */
+  bool peerVote[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX]; /* granted vote count from peer nodes in current term */
   RAFT_STATE currentState;
   uint16_t currentTerm; /* latest term server has seen (initialized to 0 on first boot, increases monotonically) */
   UWB_Address_t voteFor; /* candidate that received vote in current term (or null if none), RAFT_VOTE_FOR_NO_ONE == null */
