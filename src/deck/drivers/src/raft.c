@@ -33,13 +33,19 @@ static void raftRxTask() {
   while (1) {
     // TODO: handlers
     if (uwbReceiveDataPacketBlock(UWB_DATA_MESSAGE_RAFT, &dataRxPacket)) {
+      UWB_Address_t peer = dataRxPacket.header.srcAddress;
       uint8_t type = dataRxPacket.payload[0];
       switch (type) {
-        case RAFT_REQUEST_VOTE:raftProcessRequestVote((Raft_Request_Vote_Args_t *) dataRxPacket.payload);
-        case RAFT_REQUEST_VOTE_REPLY: raftProcessRequestVoteReply((Raft_Request_Vote_Reply_t *) dataRxPacket.payload);
-        case RAFT_APPEND_ENTRIES: raftProcessAppendEntries((Raft_Append_Entries_Args_t *) dataRxPacket.payload);
-        case RAFT_APPEND_ENTRIES_REPLY:raftProcessAppendEntriesReply((Raft_Append_Entries_Reply_t *) dataRxPacket.payload);
-        default:DEBUG_PRINT("raftRxTask: %u received unknown raft message type = %u.\n",
+        case RAFT_REQUEST_VOTE:
+          raftProcessRequestVote((Raft_Request_Vote_Args_t *) dataRxPacket.payload);
+        case RAFT_REQUEST_VOTE_REPLY:
+          raftProcessRequestVoteReply(peer, (Raft_Request_Vote_Reply_t *) dataRxPacket.payload);
+        case RAFT_APPEND_ENTRIES:
+          raftProcessAppendEntries((Raft_Append_Entries_Args_t *) dataRxPacket.payload);
+        case RAFT_APPEND_ENTRIES_REPLY:
+          raftProcessAppendEntriesReply((Raft_Append_Entries_Reply_t *) dataRxPacket.payload);
+        default:
+          DEBUG_PRINT("raftRxTask: %u received unknown raft message type = %u.\n",
                             raftNode.me,
                             type);
       }
@@ -83,11 +89,11 @@ void raftInit() {
 }
 
 // TODO: leader broadcasting, follower uni-casting
-void raftSendRequestVote(UWB_Address_t address) {
+void raftSendRequestVote(UWB_Address_t peerAddress) {
   UWB_Data_Packet_t dataTxPacket;
   dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
   dataTxPacket.header.srcAddress = raftNode.me;
-  dataTxPacket.header.destAddress = address;
+  dataTxPacket.header.destAddress = peerAddress;
   dataTxPacket.header.ttl = 10;
   dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Request_Vote_Args_t);
   Raft_Request_Vote_Args_t *args = (Raft_Request_Vote_Args_t *) &dataTxPacket.payload;
@@ -96,10 +102,9 @@ void raftSendRequestVote(UWB_Address_t address) {
   args->candidateId = raftNode.me;
   args->lastLogIndex = raftNode.log.items[raftNode.log.size - 1].index;
   args->lastLogTerm = raftNode.log.items[raftNode.log.size - 1].term;
-  DEBUG_PRINT("raftSendRequestVote: %u send request vote to %u.\n", raftNode.me, address);
+  DEBUG_PRINT("raftSendRequestVote: %u send request vote to %u.\n", raftNode.me, peerAddress);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
-
 // TODO: check
 void raftProcessRequestVote(Raft_Request_Vote_Args_t *args) {
   DEBUG_PRINT("raftProcessRequestVote: %u received vote request from %u.\n", raftNode.me, args->candidateId);
@@ -110,6 +115,7 @@ void raftProcessRequestVote(Raft_Request_Vote_Args_t *args) {
     raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, false);
     return;
   }
+  /* If RPC request or response contains term T > currentTerm, set currentTerm = T, convert to follower. */
   if (args->term > raftNode.currentTerm) {
     DEBUG_PRINT("raftProcessRequestVote: Candidate term = %u > my term = %u, convert to follower.\n",
                 args->term,
@@ -138,12 +144,12 @@ void raftProcessRequestVote(Raft_Request_Vote_Args_t *args) {
   DEBUG_PRINT("raftProcessRequestVote: %u grant vote to %u.\n", raftNode.me, args->candidateId);
   raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, true);
 }
-
-void raftSendRequestVoteReply(UWB_Address_t address, uint16_t term, bool voteGranted) {
+// TODO: check
+void raftSendRequestVoteReply(UWB_Address_t peerAddress, uint16_t term, bool voteGranted) {
   UWB_Data_Packet_t dataTxPacket;
   dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
   dataTxPacket.header.srcAddress = raftNode.me;
-  dataTxPacket.header.destAddress = address;
+  dataTxPacket.header.destAddress = peerAddress;
   dataTxPacket.header.ttl = 10;
   dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Request_Vote_Reply_t);
   Raft_Request_Vote_Reply_t *reply = (Raft_Request_Vote_Reply_t *) &dataTxPacket.payload;
@@ -152,16 +158,54 @@ void raftSendRequestVoteReply(UWB_Address_t address, uint16_t term, bool voteGra
   reply->voteGranted = voteGranted;
   DEBUG_PRINT("raftSendRequestVoteReply: %u send vote reply to %u, term = %u, granted = %d.\n",
               raftNode.me,
-              address,
+              peerAddress,
               term,
               voteGranted);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
-
-void raftProcessRequestVoteReply(Raft_Request_Vote_Reply_t *reply) {
-//  TODO
+// TODO: check
+void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Reply_t *reply) {
+  if (reply->term < raftNode.currentTerm) {
+    DEBUG_PRINT("raftProcessRequestVoteReply: Peer term = %u < my term = %u, ignore.\n",
+                reply->term,
+                raftNode.currentTerm);
+    return;
+  }
+  /* If RPC request or response contains term T > currentTerm, set currentTerm = T, convert to follower. */
+  if (reply->term > raftNode.currentTerm) {
+    DEBUG_PRINT("raftProcessRequestVoteReply: Peer term = %u > my term = %u, convert to follower.\n",
+                reply->term,
+                raftNode.currentTerm
+    );
+    raftNode.currentTerm = reply->term;
+    convertToFollower(&raftNode);
+  }
+  if (reply->voteGranted && raftNode.currentState == RAFT_STATE_CANDIDATE) {
+    raftNode.peerVote[peerAddress] = true;
+    uint8_t voteCount = 0;
+    for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
+      if (raftNode.peerNodes[i]) {
+        voteCount++;
+      }
+    }
+    // TODO: Compare vote count with actual node configuration
+    if (voteCount >= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX / 2) {
+      DEBUG_PRINT("raftProcessRequestVoteReply: %u elected as leader.\n", raftNode.me);
+      raftNode.currentState = RAFT_STATE_LEADER;
+      /* Upon election: send initial empty AppendEntries RPCs (heartbeat) to each server, repeat during idle periods to
+       * prevent election timeouts.
+       */
+      for (int peerNode = 0; peerNode < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peerNode++) {
+        if (peerNode != raftNode.me) {
+          raftNode.nextIndex[peerNode] = raftNode.log.size;
+          raftNode.matchIndex[peerNode] = 0;
+          raftSendAppendEntries(peerNode);
+        }
+      }
+    }
+  }
 }
-
+// TODO: check
 void raftSendAppendEntries(UWB_Address_t address) {
   UWB_Data_Packet_t dataTxPacket;
   dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;

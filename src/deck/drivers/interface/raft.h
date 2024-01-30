@@ -90,10 +90,10 @@ typedef struct {
 } __attribute__((packed)) Raft_Append_Entries_Reply_t;
 
 void raftInit();
-void raftSendRequestVote(UWB_Address_t address);
+void raftSendRequestVote(UWB_Address_t peerAddress);
 void raftProcessRequestVote(Raft_Request_Vote_Args_t *args);
-void raftSendRequestVoteReply(UWB_Address_t address, uint16_t term, bool voteGranted);
-void raftProcessRequestVoteReply(Raft_Request_Vote_Reply_t *reply);
+void raftSendRequestVoteReply(UWB_Address_t peerAddress, uint16_t term, bool voteGranted);
+void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Reply_t *reply);
 void raftSendAppendEntries(UWB_Address_t address);
 void raftProcessAppendEntries(Raft_Append_Entries_Args_t *args);
 void raftSendAppendEntriesReply(UWB_Address_t address, uint16_t term, bool success);
