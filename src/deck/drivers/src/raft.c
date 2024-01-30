@@ -33,22 +33,24 @@ static void raftRxTask() {
   while (1) {
     // TODO: handlers
     if (uwbReceiveDataPacketBlock(UWB_DATA_MESSAGE_RAFT, &dataRxPacket)) {
+      xSemaphoreTake(raftNode.mu, portMAX_DELAY);
       UWB_Address_t peer = dataRxPacket.header.srcAddress;
       uint8_t type = dataRxPacket.payload[0];
       switch (type) {
         case RAFT_REQUEST_VOTE:
-          raftProcessRequestVote((Raft_Request_Vote_Args_t *) dataRxPacket.payload);
+          raftProcessRequestVote(peer, (Raft_Request_Vote_Args_t *) dataRxPacket.payload);
         case RAFT_REQUEST_VOTE_REPLY:
           raftProcessRequestVoteReply(peer, (Raft_Request_Vote_Reply_t *) dataRxPacket.payload);
         case RAFT_APPEND_ENTRIES:
-          raftProcessAppendEntries((Raft_Append_Entries_Args_t *) dataRxPacket.payload);
+          raftProcessAppendEntries(peer, (Raft_Append_Entries_Args_t *) dataRxPacket.payload);
         case RAFT_APPEND_ENTRIES_REPLY:
-          raftProcessAppendEntriesReply((Raft_Append_Entries_Reply_t *) dataRxPacket.payload);
+          raftProcessAppendEntriesReply(peer, (Raft_Append_Entries_Reply_t *) dataRxPacket.payload);
         default:
           DEBUG_PRINT("raftRxTask: %u received unknown raft message type = %u.\n",
                             raftNode.me,
                             type);
       }
+      xSemaphoreGive(raftNode.mu);
     }
     vTaskDelay(M2T(1));
   }
@@ -106,8 +108,8 @@ void raftSendRequestVote(UWB_Address_t peerAddress) {
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 // TODO: check
-void raftProcessRequestVote(Raft_Request_Vote_Args_t *args) {
-  DEBUG_PRINT("raftProcessRequestVote: %u received vote request from %u.\n", raftNode.me, args->candidateId);
+void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t *args) {
+  DEBUG_PRINT("raftProcessRequestVote: %u received vote request from %u.\n", raftNode.me, peerAddress);
   if (args->term < raftNode.currentTerm) {
     DEBUG_PRINT("raftProcessRequestVote: Candidate term = %u < my term = %u, ignore.\n",
                 args->term,
@@ -165,6 +167,7 @@ void raftSendRequestVoteReply(UWB_Address_t peerAddress, uint16_t term, bool vot
 }
 // TODO: check
 void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Reply_t *reply) {
+  DEBUG_PRINT("raftProcessRequestVoteReply: %u received vote request reply from %u.\n", raftNode.me, peerAddress);
   if (reply->term < raftNode.currentTerm) {
     DEBUG_PRINT("raftProcessRequestVoteReply: Peer term = %u < my term = %u, ignore.\n",
                 reply->term,
@@ -206,39 +209,39 @@ void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Re
   }
 }
 // TODO: check
-void raftSendAppendEntries(UWB_Address_t address) {
+void raftSendAppendEntries(UWB_Address_t peerAddress) {
   UWB_Data_Packet_t dataTxPacket;
   dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
   dataTxPacket.header.srcAddress = raftNode.me;
-  dataTxPacket.header.destAddress = address;
+  dataTxPacket.header.destAddress = peerAddress;
   dataTxPacket.header.ttl = 10;
   dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Append_Entries_Args_t);
   Raft_Append_Entries_Args_t *args = (Raft_Append_Entries_Args_t *) &dataTxPacket.payload;
   args->type = RAFT_APPEND_ENTRIES;
   args->term = raftNode.currentTerm;
   args->leaderId = raftNode.me;
-  args->prevLogIndex = raftNode.log.items[raftNode.nextIndex[address] - 1].index;
-  args->prevLogTerm = raftNode.log.items[raftNode.nextIndex[address] - 1].term;
+  args->prevLogIndex = raftNode.log.items[raftNode.nextIndex[peerAddress] - 1].index;
+  args->prevLogTerm = raftNode.log.items[raftNode.nextIndex[peerAddress] - 1].term;
   args->entryCount = 0;
   // TODO: check
-  int startIndex = MAX(0, raftNode.nextIndex[address] - RAFT_LOG_ENTRIES_SIZE_MAX);
-  for (int i = startIndex; i < raftNode.nextIndex[address]; i++) {
+  int startIndex = MAX(0, raftNode.nextIndex[peerAddress] - RAFT_LOG_ENTRIES_SIZE_MAX);
+  for (int i = startIndex; i < raftNode.nextIndex[peerAddress]; i++) {
     args->entries[args->entryCount] = raftNode.log.items[i];
     args->entryCount++;
   }
   args->leaderCommit = raftNode.commitIndex;
-  DEBUG_PRINT("raftSendAppendEntries: %u send append entries to %u.\n", raftNode.me, address);
+  DEBUG_PRINT("raftSendAppendEntries: %u send append entries to %u.\n", raftNode.me, peerAddress);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
+// TODO: check
+void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Args_t *args) {
+  DEBUG_PRINT("raftProcessAppendEntries: %u received append entries request from %u.\n", raftNode.me, peerAddress);
+}
 
-void raftProcessAppendEntries(Raft_Append_Entries_Args_t *args) {
+void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool success) {
 //  TODO
 }
 
-void raftSendAppendEntriesReply(UWB_Address_t address, uint16_t term, bool success) {
-//  TODO
-}
-
-void raftProcessAppendEntriesReply(Raft_Append_Entries_Reply_t *reply) {
-//  TODO
+void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entries_Reply_t *reply) {
+  DEBUG_PRINT("raftProcessAppendEntriesReply: %u received append entries reply from %u.\n", raftNode.me, peerAddress);
 }
