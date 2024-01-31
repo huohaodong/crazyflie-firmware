@@ -74,6 +74,11 @@ static int raftLogGetLastLogItemByTerm(Raft_Log_t *raftLog, uint16_t logTerm) {
   return left;
 }
 // TODO: check
+static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
+  // TODO
+  DEBUG_PRINT("raftLogApply: Apply log index = %u.\n", raftLog->items[logItemIndex].index);
+}
+// TODO: check
 static void raftUpdateCommitIndex(Raft_Node_t *node) {
   // TODO: Compare count with actual node configuration
   for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
@@ -106,15 +111,53 @@ static void convertToFollower(Raft_Node_t *node) {
 }
 // TODO: check
 static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
-
+  xSemaphoreTake(raftNode.mu, portMAX_DELAY);
+  if (raftNode.currentState == RAFT_STATE_LEADER) {
+    // TODO: use actual node configuration
+    for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+      if (peer != raftNode.me) {
+        raftSendAppendEntries(peer);
+        vTaskDelay(M2T(1));
+      }
+    }
+  }
+  xSemaphoreGive(raftNode.mu);
 }
 // TODO: check
 static void raftElectionTimerCallback(TimerHandle_t timer) {
-
+  xSemaphoreTake(raftNode.mu, portMAX_DELAY);
+  Time_t curTime = xTaskGetTickCount();
+  if (raftNode.currentState != RAFT_STATE_LEADER && (curTime - raftNode.lastHeartbeatTime) > RAFT_ELECTION_TIMEOUT) {
+    DEBUG_PRINT("raftLogApplyTimerCallback: %u timeout in term %u, commitIndex = %u.\n",
+                raftNode.me,
+                raftNode.currentTerm);
+    raftNode.currentTerm++;
+    raftNode.currentState = RAFT_STATE_CANDIDATE;
+    for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+      raftNode.peerVote[peer] = false;
+    }
+    raftNode.voteFor = raftNode.me;
+    raftNode.lastHeartbeatTime = xTaskGetTickCount();
+    for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+      if (peer != raftNode.me) {
+        raftSendRequestVote(peer);
+        vTaskDelay(M2T(1));
+      }
+    }
+  } else {
+    raftNode.lastHeartbeatTime = xTaskGetTickCount();
+  }
+  xSemaphoreGive(raftNode.mu);
 }
 // TODO: check
 static void raftLogApplyTimerCallback(TimerHandle_t timer) {
-
+  xSemaphoreTake(raftNode.mu, portMAX_DELAY);
+  int startIndex = raftNode.lastApplied + 1;
+  for (int i = startIndex; i <= raftNode.commitIndex; i++) {
+    raftNode.lastApplied++;
+    raftLogApply(&raftNode.log, i);
+  }
+  xSemaphoreGive(raftNode.mu);
 }
 
 static void raftRxTask() {
@@ -177,16 +220,19 @@ void raftInit() {
                                    pdTRUE,
                                    (void *) 0,
                                     raftHeartbeatTimerCallback);
+  xTimerStart(raftHeartbeatTimer, M2T(0));
   raftElectionTimer = xTimerCreate("raftElectionTimer",
-                                   M2T(rand() % 10 + RAFT_ELECTION_TIMEOUT),
+                                   M2T(rand() % 10 + RAFT_ELECTION_TIMEOUT / 2),
                                    pdTRUE,
                                    (void *) 0,
                                    raftElectionTimerCallback);
+  xTimerStart(raftElectionTimer, M2T(0));
   raftLogApplyTimer = xTimerCreate("raftLogApplyTimer",
                                    M2T(RAFT_LOG_APPLY_INTERVAL),
                                    pdTRUE,
                                    (void *) 0,
                                    raftLogApplyTimerCallback);
+  xTimerStart(raftLogApplyTimer, M2T(0));
 
   xTaskCreate(raftRxTask, ADHOC_DECK_RAFT_RX_TASK_NAME, UWB_TASK_STACK_SIZE, NULL,
               ADHOC_DECK_TASK_PRI, &raftRxTaskHandle);
