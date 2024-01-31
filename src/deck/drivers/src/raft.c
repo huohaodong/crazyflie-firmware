@@ -1,4 +1,6 @@
+#include <stdlib.h>
 #include "FreeRTOS.h"
+#include "timers.h"
 #include "raft.h"
 #include "debug.h"
 
@@ -13,6 +15,9 @@
 static QueueHandle_t rxQueue;
 static TaskHandle_t raftRxTaskHandle;
 static Raft_Node_t raftNode;
+static TimerHandle_t raftElectionTimer;
+static TimerHandle_t raftHeartbeatTimer;
+static TimerHandle_t raftLogApplyTimer;
 static Raft_Log_Item_t EMPTY_LOG_ITEM = {
     .term = 0,
     .index = 0,
@@ -99,6 +104,18 @@ static void convertToFollower(Raft_Node_t *node) {
   }
   node->lastHeartbeatTime = xTaskGetTickCount();
 }
+// TODO: check
+static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
+
+}
+// TODO: check
+static void raftElectionTimerCallback(TimerHandle_t timer) {
+
+}
+// TODO: check
+static void raftLogApplyTimerCallback(TimerHandle_t timer) {
+
+}
 
 static void raftRxTask() {
   UWB_Data_Packet_t dataRxPacket;
@@ -131,39 +148,48 @@ static void raftRxTask() {
 void raftInit() {
   xSemaphoreCreateMutex();
   rxQueue = xQueueCreate(RAFT_RX_QUEUE_SIZE, RAFT_RX_QUEUE_ITEM_SIZE);
-  raftNodeInit(&raftNode);
   UWB_Data_Packet_Listener_t listener = {
       .type = UWB_DATA_MESSAGE_RAFT,
       .rxQueue = rxQueue
   };
   uwbRegisterDataPacketListener(&listener);
 
-  xTaskCreate(raftRxTask, ADHOC_DECK_RAFT_RX_TASK_NAME, UWB_TASK_STACK_SIZE, NULL,
-              ADHOC_DECK_TASK_PRI, &raftRxTaskHandle);
-}
-
-void raftNodeInit(Raft_Node_t *node) {
-  node->mu = xSemaphoreCreateMutex();
-  node->me = uwbGetAddress();
+  raftNode.mu = xSemaphoreCreateMutex();
+  raftNode.me = uwbGetAddress();
 //  node.peerNodes = ? TODO: init peer
   for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
-    node->peerVote[i] = false;
+    raftNode.peerVote[i] = false;
   }
-  node->currentState = RAFT_STATE_FOLLOWER;
-  node->currentTerm = 0;
-  node->voteFor = RAFT_VOTE_FOR_NO_ONE;
-  node->log.items[0] = EMPTY_LOG_ITEM;
-  node->log.size = 1;
-  node->commitIndex = 0;
-  node->lastApplied = 0;
+  raftNode.currentState = RAFT_STATE_FOLLOWER;
+  raftNode.currentTerm = 0;
+  raftNode.voteFor = RAFT_VOTE_FOR_NO_ONE;
+  raftNode.log.items[0] = EMPTY_LOG_ITEM;
+  raftNode.log.size = 1;
+  raftNode.commitIndex = 0;
+  raftNode.lastApplied = 0;
   for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
-    node->nextIndex[i] = node->log.items[node->log.size - 1].index + 1;
-    node->matchIndex[i] = 0;
+    raftNode.nextIndex[i] = raftNode.log.items[raftNode.log.size - 1].index + 1;
+    raftNode.matchIndex[i] = 0;
   }
   raftNode.lastHeartbeatTime = xTaskGetTickCount();
-//  TODO: election timer
-//  TODO: heartbeat timer
-//  TODO: log applier timer
+  raftHeartbeatTimer = xTimerCreate("raftHeartbeatTimer",
+                                   M2T(RAFT_HEARTBEAT_INTERVAL),
+                                   pdTRUE,
+                                   (void *) 0,
+                                    raftHeartbeatTimerCallback);
+  raftElectionTimer = xTimerCreate("raftElectionTimer",
+                                   M2T(rand() % 10 + RAFT_ELECTION_TIMEOUT),
+                                   pdTRUE,
+                                   (void *) 0,
+                                   raftElectionTimerCallback);
+  raftLogApplyTimer = xTimerCreate("raftLogApplyTimer",
+                                   M2T(RAFT_LOG_APPLY_INTERVAL),
+                                   pdTRUE,
+                                   (void *) 0,
+                                   raftLogApplyTimerCallback);
+
+  xTaskCreate(raftRxTask, ADHOC_DECK_RAFT_RX_TASK_NAME, UWB_TASK_STACK_SIZE, NULL,
+              ADHOC_DECK_TASK_PRI, &raftRxTaskHandle);
 }
 
 // TODO: leader broadcasting, follower uni-casting

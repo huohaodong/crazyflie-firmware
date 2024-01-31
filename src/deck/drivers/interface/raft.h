@@ -15,6 +15,9 @@
 #define RAFT_LOG_SIZE_MAX 100
 #define RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX 10
 #define RAFT_VOTE_FOR_NO_ONE UWB_DEST_EMPTY
+#define RAFT_HEARTBEAT_INTERVAL 100 // default 100ms
+#define RAFT_ELECTION_TIMEOUT 1000 // default 1s
+#define RAFT_LOG_APPLY_INTERVAL 50 // default 50ms
 
 typedef enum {
   RAFT_STATE_FOLLOWER,
@@ -93,7 +96,6 @@ typedef struct {
 } __attribute__((packed)) Raft_Append_Entries_Reply_t;
 
 void raftInit();
-void raftNodeInit(Raft_Node_t *node);
 void raftSendRequestVote(UWB_Address_t peerAddress);
 void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t *args);
 void raftSendRequestVoteReply(UWB_Address_t peerAddress, uint16_t term, bool voteGranted);
