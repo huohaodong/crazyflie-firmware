@@ -130,7 +130,8 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
   if (raftNode.currentState != RAFT_STATE_LEADER && (curTime - raftNode.lastHeartbeatTime) > RAFT_ELECTION_TIMEOUT) {
     DEBUG_PRINT("raftLogApplyTimerCallback: %u timeout in term %u, commitIndex = %u.\n",
                 raftNode.me,
-                raftNode.currentTerm);
+                raftNode.currentTerm,
+                raftNode.commitIndex);
     raftNode.currentTerm++;
     raftNode.currentState = RAFT_STATE_CANDIDATE;
     for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
