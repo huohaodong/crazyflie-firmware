@@ -111,6 +111,7 @@ static void convertToFollower(Raft_Node_t *node) {
 }
 // TODO: check
 static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
+//  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
   if (raftNode.currentState == RAFT_STATE_LEADER) {
     // TODO: use actual node configuration
@@ -125,24 +126,30 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 }
 // TODO: check
 static void raftElectionTimerCallback(TimerHandle_t timer) {
+//  DEBUG_PRINT("raftElectionTimerCallback: %u trigger election timer at %lu, lastHeartbeat = %lu.\n",
+//              raftNode.me,
+//              xTaskGetTickCount(),
+//              raftNode.lastHeartbeatTime);
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
   Time_t curTime = xTaskGetTickCount();
-  if (raftNode.currentState != RAFT_STATE_LEADER && (curTime - raftNode.lastHeartbeatTime) > RAFT_ELECTION_TIMEOUT) {
-    DEBUG_PRINT("raftLogApplyTimerCallback: %u timeout in term %u, commitIndex = %u.\n",
-                raftNode.me,
-                raftNode.currentTerm,
-                raftNode.commitIndex);
-    raftNode.currentTerm++;
-    raftNode.currentState = RAFT_STATE_CANDIDATE;
-    for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
-      raftNode.peerVote[peer] = false;
-    }
-    raftNode.voteFor = raftNode.me;
-    raftNode.lastHeartbeatTime = xTaskGetTickCount();
-    for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
-      if (peer != raftNode.me) {
-        raftSendRequestVote(peer);
-        vTaskDelay(M2T(1));
+  if (raftNode.currentState != RAFT_STATE_LEADER) {
+    if ((curTime - raftNode.lastHeartbeatTime) > RAFT_ELECTION_TIMEOUT) {
+      DEBUG_PRINT("raftLogApplyTimerCallback: %u timeout in term %u, commitIndex = %u.\n",
+                  raftNode.me,
+                  raftNode.currentTerm,
+                  raftNode.commitIndex);
+      raftNode.currentTerm++;
+      raftNode.currentState = RAFT_STATE_CANDIDATE;
+      for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+        raftNode.peerVote[peer] = false;
+      }
+      raftNode.voteFor = raftNode.me;
+      raftNode.lastHeartbeatTime = xTaskGetTickCount();
+      for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+        if (peer != raftNode.me) {
+          raftSendRequestVote(peer);
+          vTaskDelay(M2T(1));
+        }
       }
     }
   } else {
@@ -152,6 +159,7 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
 }
 // TODO: check
 static void raftLogApplyTimerCallback(TimerHandle_t timer) {
+//  DEBUG_PRINT("raftLogApplyTimerCallback: %u trigger log apply timer at %lu.\n", raftNode.me, xTaskGetTickCount());
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
   int startIndex = raftNode.lastApplied + 1;
   for (int i = startIndex; i <= raftNode.commitIndex; i++) {
@@ -172,12 +180,16 @@ static void raftRxTask() {
       switch (type) {
         case RAFT_REQUEST_VOTE:
           raftProcessRequestVote(peer, (Raft_Request_Vote_Args_t *) dataRxPacket.payload);
+          break;
         case RAFT_REQUEST_VOTE_REPLY:
           raftProcessRequestVoteReply(peer, (Raft_Request_Vote_Reply_t *) dataRxPacket.payload);
+          break;
         case RAFT_APPEND_ENTRIES:
           raftProcessAppendEntries(peer, (Raft_Append_Entries_Args_t *) dataRxPacket.payload);
+          break;
         case RAFT_APPEND_ENTRIES_REPLY:
           raftProcessAppendEntriesReply(peer, (Raft_Append_Entries_Reply_t *) dataRxPacket.payload);
+          break;
         default:
           DEBUG_PRINT("raftRxTask: %u received unknown raft message type = %u.\n",
                             raftNode.me,
@@ -223,7 +235,7 @@ void raftInit() {
                                     raftHeartbeatTimerCallback);
   xTimerStart(raftHeartbeatTimer, M2T(0));
   raftElectionTimer = xTimerCreate("raftElectionTimer",
-                                   M2T(rand() % 10 + RAFT_ELECTION_TIMEOUT / 2),
+                                   M2T((rand() % 1000) + RAFT_ELECTION_TIMEOUT),
                                    pdTRUE,
                                    (void *) 0,
                                    raftElectionTimerCallback);

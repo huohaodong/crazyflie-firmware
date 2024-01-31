@@ -16,7 +16,7 @@
 #define RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX 10
 #define RAFT_VOTE_FOR_NO_ONE UWB_DEST_EMPTY
 #define RAFT_HEARTBEAT_INTERVAL 100 // default 100ms
-#define RAFT_ELECTION_TIMEOUT 1000 // default 1s
+#define RAFT_ELECTION_TIMEOUT 5000 // default 3s
 #define RAFT_LOG_APPLY_INTERVAL 50 // default 50ms
 
 typedef enum {
