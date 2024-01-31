@@ -279,7 +279,7 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
     DEBUG_PRINT("raftProcessAppendEntries: Peer term = %u < my term = %u, ignore.\n",
                 args->term,
                 raftNode.currentTerm);
-    raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, false);
+    raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, false, 0);
     return;
   }
   /* If RPC request or response contains term T > currentTerm, set currentTerm = T, convert to follower. */
@@ -310,7 +310,7 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
         raftNode.me,
         args->prevLogIndex,
         args->prevLogTerm);
-    raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, false);
+    raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, false, 0);
     return;
   }
   /* If an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all
@@ -333,10 +333,10 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
     raftNode.commitIndex = MIN(args->leaderCommit, raftNode.log.items[raftNode.log.size - 1].index);
   }
   raftNode.lastHeartbeatTime = xTaskGetTickCount();
-  raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, true);
+  raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, true, raftNode.log.items[raftNode.log.size - 1].index + 1);
 }
 // TODO: check
-void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool success) {
+void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool success, uint16_t nextIndex) {
   UWB_Data_Packet_t dataTxPacket;
   dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
   dataTxPacket.header.srcAddress = raftNode.me;
@@ -347,6 +347,7 @@ void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool s
   reply->type = RAFT_APPEND_ENTRIES_REPLY;
   reply->term = term;
   reply->success = success;
+  reply->nextIndex = nextIndex;
   DEBUG_PRINT("raftSendAppendEntriesReply: %u send vote reply to %u, term = %u, success = %d.\n",
               raftNode.me,
               peerAddress,
@@ -361,7 +362,6 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
     DEBUG_PRINT("raftProcessAppendEntriesReply: Peer term = %u < my term = %u, ignore.\n",
                 reply->term,
                 raftNode.currentTerm);
-
     return;
   }
   /* If RPC request or response contains term T > currentTerm, set currentTerm = T, convert to follower. */
@@ -374,15 +374,17 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
     convertToFollower(&raftNode);
   }
   if (reply->success) {
-    // TODO: add info in messages to update match index and next index.
-//    raftNode.matchIndex[peerAddress] = ?
-//    raftNode.nextIndex[peerAddress] = ?
+    raftNode.nextIndex[peerAddress] = MAX(raftNode.nextIndex[peerAddress], reply->nextIndex);
+    raftNode.matchIndex[peerAddress] = raftNode.nextIndex[peerAddress] - 1;
     /* If there exists an N such that N > commitIndex, a majority of matchIndex[i] ≥ N,
-     * and log[N].term == currentTerm: set commitIndex = N
+     * and log[N].term == currentTerm: set commitIndex = N.
      */
     // TODO: update commit index and apply index.
   } else {
-    /* If AppendEntries fails because of log inconsistency: decrement nextIndex and retry. */
-    // TODO: sendAppendEntries && backward log index term by term
+    /* If AppendEntries fails because of log inconsistency: decrement nextIndex and retry.
+     * Here we decrement nextIndex from matchIndex to nextIndex in a term by term way for efficiency.
+     */
+    // TODO
+    raftSendAppendEntries(peerAddress);
   }
 }

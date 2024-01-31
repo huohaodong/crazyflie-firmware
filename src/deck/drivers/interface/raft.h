@@ -87,6 +87,9 @@ typedef struct {
   RAFT_MESSAGE_TYPE type;
   uint16_t term; /* currentTerm, for leader to update itself */
   bool success; /* true if follower contained entry matching prevLogIndex and prevLogTerm */
+  /* Since we don't have rpc mechanism here, to help leader update nextIndex and matchIndex, follower should tell
+   * leader it's replication progress. */
+  uint16_t nextIndex; /* 0 represents null */
 } __attribute__((packed)) Raft_Append_Entries_Reply_t;
 
 void raftInit();
@@ -97,7 +100,7 @@ void raftSendRequestVoteReply(UWB_Address_t peerAddress, uint16_t term, bool vot
 void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Reply_t *reply);
 void raftSendAppendEntries(UWB_Address_t peerAddress);
 void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Args_t *args);
-void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool success);
+void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool success, uint16_t nextIndex);
 void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entries_Reply_t *reply);
 
 #endif
