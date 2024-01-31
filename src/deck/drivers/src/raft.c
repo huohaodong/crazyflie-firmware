@@ -328,7 +328,10 @@ void raftSendRequestVoteReply(UWB_Address_t peerAddress, uint16_t term, bool vot
 }
 // TODO: check
 void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Reply_t *reply) {
-  DEBUG_PRINT("raftProcessRequestVoteReply: %u received vote request reply from %u.\n", raftNode.me, peerAddress);
+  DEBUG_PRINT("raftProcessRequestVoteReply: %u received vote request reply from %u, grant = %d.\n",
+              raftNode.me,
+              peerAddress,
+              reply->voteGranted);
   if (reply->term < raftNode.currentTerm) {
     DEBUG_PRINT("raftProcessRequestVoteReply: Peer term = %u < my term = %u, ignore.\n",
                 reply->term,
@@ -348,10 +351,11 @@ void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Re
     raftNode.peerVote[peerAddress] = true;
     uint8_t voteCount = 0;
     for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
-      if (i != raftNode.me && raftNode.peerNodes[i]) {
+      if (i != raftNode.me && raftNode.peerVote[i]) {
         voteCount++;
       }
     }
+    DEBUG_PRINT("raftProcessRequestVoteReply: voteCount = %u.\n", voteCount);
     // TODO: Compare vote count with actual node configuration
     if (voteCount >= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX / 2) {
       DEBUG_PRINT("raftProcessRequestVoteReply: %u elected as leader.\n", raftNode.me);
@@ -479,11 +483,12 @@ void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool s
   reply->term = term;
   reply->success = success;
   reply->nextIndex = nextIndex;
-  DEBUG_PRINT("raftSendAppendEntriesReply: %u send vote reply to %u, term = %u, success = %d.\n",
+  DEBUG_PRINT("raftSendAppendEntriesReply: %u send append entries reply to %u, term = %u, success = %d, nextIndex = %u.\n",
               raftNode.me,
               peerAddress,
               term,
-              success);
+              success,
+              nextIndex);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 // TODO: check
