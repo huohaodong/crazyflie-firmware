@@ -29,12 +29,19 @@ static int raftLogFindByIndex(Raft_Log_t *raftLog, uint16_t logIndex) {
 }
 // TODO: check
 static int raftLogFindMatched(Raft_Log_t *raftLog, uint16_t logIndex, uint16_t logTerm) {
-  for (int i = raftLog->size - 1; i >= 0; i--) {
-    if (raftLog->items[i].index == logIndex) {
-      if (raftLog->items[i].term == logTerm) {
-        return i;
+  /* Binary Search */
+  int left = -1, right = raftLog->size;
+  while (left + 1 != right) {
+    int mid = left + (right - left) / 2;
+    if (raftLog->items[mid].index == logIndex) {
+      if (raftLog->items[mid].term == logTerm) {
+        return mid;
       }
       break;
+    } else if (raftLog->items[mid].index > logIndex) {
+      right = mid;
+    } else {
+      left = mid;
     }
   }
   return -1;
@@ -46,6 +53,42 @@ static void raftLogCleanFrom(Raft_Log_t *raftLog, uint16_t itemStartIndex) {
     raftLog->items[i] = EMPTY_LOG_ITEM;
   }
   raftLog->size = itemStartIndex;
+}
+// TODO: check
+static int raftLogGetLastLogItemByTerm(Raft_Log_t *raftLog, uint16_t logTerm) {
+  /* Binary search, i.e. find last 6 in [1,2,3,3,6,6,6,6,7,8] */
+  int left = -1, right = raftLog->size;
+  while (left + 1 != right) {
+    int mid = left + (right - left) / 2;
+    if (raftLog->items[mid].term <= logTerm) {
+      left = mid;
+    } else if (raftLog->items[mid].term > logTerm) {
+      right = mid;
+    }
+  }
+  return left;
+}
+// TODO: check
+static void raftUpdateCommitIndex(Raft_Node_t *node) {
+  // TODO: Compare count with actual node configuration
+  for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+    uint16_t candidateCommitIndex = node->matchIndex[peer];
+    if (candidateCommitIndex > node->commitIndex) {
+      uint8_t count = 0;
+      for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
+        if (i != node->me && node->matchIndex[i] >= candidateCommitIndex) {
+          count++;
+        }
+      }
+      if (count >= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX / 2) {
+        DEBUG_PRINT("raftUpdateCommitIndex: %u update commit index from %u to %u.\n",
+                    node->me,
+                    node->commitIndex,
+                    MAX(node->commitIndex, candidateCommitIndex));
+        node->commitIndex = MAX(node->commitIndex, candidateCommitIndex);
+      }
+    }
+  }
 }
 
 static void convertToFollower(Raft_Node_t *node) {
@@ -220,7 +263,7 @@ void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Re
     raftNode.peerVote[peerAddress] = true;
     uint8_t voteCount = 0;
     for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
-      if (raftNode.peerNodes[i]) {
+      if (i != raftNode.me && raftNode.peerNodes[i]) {
         voteCount++;
       }
     }
@@ -255,7 +298,10 @@ void raftSendAppendEntries(UWB_Address_t peerAddress) {
   args->leaderId = raftNode.me;
   // TODO: check snapshot
   int preLogItemIndex = raftLogFindByIndex(&raftNode.log, raftNode.nextIndex[peerAddress] - 1);
-  ASSERT(preLogItemIndex >= 0);
+  if (preLogItemIndex < 0) {
+    DEBUG_PRINT("raftSendAppendEntries: %u has preLogItemIndex < 0 for peer %u, ignore.\n", raftNode.me, peerAddress);
+    return;
+  }
   args->prevLogIndex = raftNode.log.items[preLogItemIndex].index;
   args->prevLogTerm = raftNode.log.items[preLogItemIndex].term;
   // TODO: check
@@ -373,18 +419,41 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
     raftNode.currentTerm = reply->term;
     convertToFollower(&raftNode);
   }
+  if (raftNode.currentState != RAFT_STATE_LEADER) {
+    DEBUG_PRINT("raftProcessAppendEntriesReply: %u is not a leader now, ignore.\n", raftNode.me);
+    return;
+  }
   if (reply->success) {
+    // TODO: check
+    /* If successful: update nextIndex and matchIndex for follower. */
     raftNode.nextIndex[peerAddress] = MAX(raftNode.nextIndex[peerAddress], reply->nextIndex);
     raftNode.matchIndex[peerAddress] = raftNode.nextIndex[peerAddress] - 1;
     /* If there exists an N such that N > commitIndex, a majority of matchIndex[i] ≥ N,
      * and log[N].term == currentTerm: set commitIndex = N.
      */
-    // TODO: update commit index and apply index.
+    raftUpdateCommitIndex(&raftNode);
   } else {
     /* If AppendEntries fails because of log inconsistency: decrement nextIndex and retry.
-     * Here we decrement nextIndex from matchIndex to nextIndex in a term by term way for efficiency.
+     * Here we decrement nextIndex from nextIndex to matchIndex in a term by term way for efficiency.
      */
-    // TODO
-    raftSendAppendEntries(peerAddress);
+    // TODO: check
+    int matchedIndex = raftLogFindByIndex(&raftNode.log, raftNode.matchIndex[peerAddress]);
+    if (matchedIndex == -1) {
+      DEBUG_PRINT("raftProcessAppendEntriesReply: %u cannot find log with matchIndex = %u.\n",
+                  raftNode.me,
+                  raftNode.matchIndex[peerAddress]
+      );
+    } else {
+      int itemIndex = raftLogGetLastLogItemByTerm(&raftNode.log, raftNode.log.items[matchedIndex].term - 1);
+      if (itemIndex == -1) {
+        DEBUG_PRINT("raftProcessAppendEntriesReply: %u cannot find log with term = %u.\n",
+                    raftNode.me,
+                    raftNode.log.items[matchedIndex].term - 1
+        );
+      } else {
+        raftNode.nextIndex[peerAddress] = MAX(raftNode.matchIndex[peerAddress] + 1, raftNode.log.items[itemIndex].index);
+        raftSendAppendEntries(peerAddress);
+      }
+    }
   }
 }
