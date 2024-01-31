@@ -118,7 +118,7 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
     for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
       if (peer != raftNode.me) {
         raftSendAppendEntries(peer);
-        vTaskDelay(M2T(1));
+        vTaskDelay(M2T(5));
       }
     }
   }
@@ -148,7 +148,7 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
       for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
         if (peer != raftNode.me) {
           raftSendRequestVote(peer);
-          vTaskDelay(M2T(1));
+          vTaskDelay(M2T(5));
         }
       }
     }
@@ -235,7 +235,7 @@ void raftInit() {
                                     raftHeartbeatTimerCallback);
   xTimerStart(raftHeartbeatTimer, M2T(0));
   raftElectionTimer = xTimerCreate("raftElectionTimer",
-                                   M2T((rand() % 1000) + RAFT_ELECTION_TIMEOUT),
+                                   M2T((rand() % 50 + RAFT_ELECTION_TIMEOUT) / 2),
                                    pdTRUE,
                                    (void *) 0,
                                    raftElectionTimerCallback);
