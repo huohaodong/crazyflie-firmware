@@ -38,6 +38,7 @@ typedef struct {
 
 typedef struct {
   SemaphoreHandle_t mu;
+  UWB_Address_t currentLeader;
   UWB_Address_t me;
   UWB_Address_t peerNodes[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX]; /* peer nodes in current raft cluster configuration */
   bool peerVote[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX]; /* granted vote count from peer nodes in current term */

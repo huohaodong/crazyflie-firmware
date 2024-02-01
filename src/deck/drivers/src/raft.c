@@ -103,6 +103,7 @@ static void raftUpdateCommitIndex(Raft_Node_t *node) {
 
 static void convertToFollower(Raft_Node_t *node) {
   node->currentState = RAFT_STATE_FOLLOWER;
+  node->currentLeader = UWB_DEST_EMPTY;
   node->voteFor = RAFT_VOTE_FOR_NO_ONE;
   for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
     node->peerVote[i] = false;
@@ -112,11 +113,13 @@ static void convertToFollower(Raft_Node_t *node) {
 
 static void convertToLeader(Raft_Node_t *node) {
   node->currentState = RAFT_STATE_LEADER;
+  node->currentLeader = node->me;
 }
 
 static void convertToCandidate(Raft_Node_t *node) {
   node->currentTerm++;
   node->currentState = RAFT_STATE_CANDIDATE;
+  node->currentLeader = UWB_DEST_EMPTY;
   for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     node->peerVote[peer] = false;
   }
@@ -220,6 +223,7 @@ void raftInit() {
   uwbRegisterDataPacketListener(&listener);
 
   raftNode.mu = xSemaphoreCreateMutex();
+  raftNode.currentLeader = UWB_DEST_EMPTY;
   raftNode.me = uwbGetAddress();
 //  node.peerNodes = ? TODO: init peer
   for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
@@ -435,7 +439,6 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
     raftNode.currentTerm = args->term;
     convertToFollower(&raftNode);
   }
-  raftNode.lastHeartbeatTime = xTaskGetTickCount();
   /* Candidate: If AppendEntries RPC received from new leader, convert to follower. */
   if (raftNode.currentState == RAFT_STATE_CANDIDATE) {
     // TODO: check
@@ -445,6 +448,8 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
         peerAddress);
     convertToFollower(&raftNode);
   }
+  raftNode.currentLeader = peerAddress;
+  raftNode.lastHeartbeatTime = xTaskGetTickCount();
   /* Reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm. */
   // TODO: check snapshot
   int matchedItemIndex = raftLogFindMatched(&raftNode.log, args->prevLogIndex, args->prevLogTerm);
@@ -476,7 +481,6 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
                 raftNode.commitIndex);
     raftNode.commitIndex = MIN(args->leaderCommit, raftNode.log.items[raftNode.log.size - 1].index);
   }
-  raftNode.lastHeartbeatTime = xTaskGetTickCount();
   raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, true, raftNode.log.items[raftNode.log.size - 1].index + 1);
 }
 // TODO: check
