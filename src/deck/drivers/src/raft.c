@@ -109,6 +109,21 @@ static void convertToFollower(Raft_Node_t *node) {
   }
   node->lastHeartbeatTime = xTaskGetTickCount();
 }
+
+static void convertToLeader(Raft_Node_t *node) {
+  node->currentState = RAFT_STATE_LEADER;
+}
+
+static void convertToCandidate(Raft_Node_t *node) {
+  node->currentTerm++;
+  node->currentState = RAFT_STATE_CANDIDATE;
+  for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+    node->peerVote[peer] = false;
+  }
+  node->voteFor = raftNode.me;
+  node->lastHeartbeatTime = xTaskGetTickCount();
+}
+
 // TODO: check
 static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
@@ -138,13 +153,7 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
                   raftNode.me,
                   raftNode.currentTerm,
                   raftNode.commitIndex);
-      raftNode.currentTerm++;
-      raftNode.currentState = RAFT_STATE_CANDIDATE;
-      for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
-        raftNode.peerVote[peer] = false;
-      }
-      raftNode.voteFor = raftNode.me;
-      raftNode.lastHeartbeatTime = xTaskGetTickCount();
+      convertToCandidate(&raftNode);
       for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
         if (peer != raftNode.me) {
           raftSendRequestVote(peer);
@@ -359,7 +368,7 @@ void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Re
     // TODO: Compare vote count with actual node configuration
     if (voteCount >= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX / 2) {
       DEBUG_PRINT("raftProcessRequestVoteReply: %u elected as leader.\n", raftNode.me);
-      raftNode.currentState = RAFT_STATE_LEADER;
+      convertToLeader(&raftNode);
       /* Upon election: send initial empty AppendEntries RPCs (heartbeat) to each server, repeat during idle periods to
        * prevent election timeouts.
        */
