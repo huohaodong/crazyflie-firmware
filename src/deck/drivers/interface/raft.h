@@ -18,6 +18,7 @@
 #define RAFT_HEARTBEAT_INTERVAL 150 // default 150ms
 #define RAFT_ELECTION_TIMEOUT (5 * RAFT_HEARTBEAT_INTERVAL)
 #define RAFT_LOG_APPLY_INTERVAL 50 // default 50ms
+#define RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX 10 // TODO: fine tuning
 
 typedef enum {
   RAFT_STATE_FOLLOWER,
@@ -32,7 +33,10 @@ typedef enum {
 
 typedef struct {
   RAFT_LOG_COMMAND_TYPE type;
+  UWB_Address_t clientId;
+  uint16_t requestId;
   // TODO payload
+//  uint8_t payload[RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX];
 } Raft_Log_Command_t;
 
 typedef struct {

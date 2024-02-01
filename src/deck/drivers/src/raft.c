@@ -21,7 +21,7 @@ static TimerHandle_t raftLogApplyTimer;
 static Raft_Log_Item_t EMPTY_LOG_ITEM = {
     .term = 0,
     .index = 0,
-    .command = {.type = RAFT_LOG_COMMAND_RESERVED}
+    .command = {.type = RAFT_LOG_COMMAND_RESERVED, .clientId = UWB_DEST_EMPTY, .requestId = 0}
 };
 // TODO: check
 static int raftLogFindByIndex(Raft_Log_t *raftLog, uint16_t logIndex) {
@@ -79,12 +79,12 @@ static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
   DEBUG_PRINT("raftLogApply: Apply log index = %u.\n", raftLog->items[logItemIndex].index);
 }
 // TODO: check
-static void raftLogAdd(Raft_Log_t *raftLog, Raft_Log_Command_t command) {
+static void raftLogAppend(Raft_Log_t *raftLog, uint16_t logTerm, Raft_Log_Command_t command) {
   if (raftLog->size >= RAFT_LOG_SIZE_MAX * 0.75) {
     // TODO: snapshot
   }
   int index = raftLog->size;
-  raftLog->items[index].term = raftNode.currentTerm;
+  raftLog->items[index].term = logTerm;
   raftLog->items[index].index = raftLog->items[index - 1].index + 1;
   raftLog->items[index].command = command;
   raftLog->size++;
