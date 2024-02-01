@@ -25,10 +25,20 @@ typedef enum {
   RAFT_STATE_LEADER
 } RAFT_STATE;
 
+typedef enum {
+  RAFT_LOG_COMMAND_RESERVED,
+  // TODO
+} RAFT_LOG_COMMAND_TYPE;
+
+typedef struct {
+  RAFT_LOG_COMMAND_TYPE type;
+  // TODO payload
+} Raft_Log_Command_t;
+
 typedef struct {
   uint16_t term;
   uint16_t index;
-  char *command; // TODO: COMMAND enum type definition
+  Raft_Log_Command_t command; // TODO: COMMAND enum type definition
 } Raft_Log_Item_t;
 
 typedef struct {

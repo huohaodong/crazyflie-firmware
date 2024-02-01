@@ -79,6 +79,18 @@ static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
   DEBUG_PRINT("raftLogApply: Apply log index = %u.\n", raftLog->items[logItemIndex].index);
 }
 // TODO: check
+static void raftLogAdd(Raft_Log_t *raftLog, Raft_Log_Command_t command) {
+  if (raftLog->size >= RAFT_LOG_SIZE_MAX * 0.75) {
+    // TODO: snapshot
+  }
+  int index = raftLog->size;
+  raftLog->items[index].term = raftNode.currentTerm;
+  raftLog->items[index].index = raftLog->items[index - 1].index + 1;
+  raftLog->items[index].command = command;
+  raftLog->size++;
+  DEBUG_PRINT("raftLogAdd: Add log index = %u, term = %u.\n", raftLog->items[index].index, raftLog->items[index].term);
+}
+// TODO: check
 static void raftUpdateCommitIndex(Raft_Node_t *node) {
   // TODO: Compare count with actual node configuration
   for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
