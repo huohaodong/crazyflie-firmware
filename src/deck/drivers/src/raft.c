@@ -13,6 +13,7 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 static QueueHandle_t rxQueue;
+static QueueHandle_t commandQueue;
 static TaskHandle_t raftRxTaskHandle;
 static Raft_Node_t raftNode;
 static TimerHandle_t raftElectionTimer;
@@ -228,6 +229,7 @@ static void raftRxTask() {
 void raftInit() {
   xSemaphoreCreateMutex();
   rxQueue = xQueueCreate(RAFT_RX_QUEUE_SIZE, RAFT_RX_QUEUE_ITEM_SIZE);
+  commandQueue = xQueueCreate(RAFT_COMMAND_QUEUE_SIZE, RAFT_COMMAND_QUEUE_ITEM_SIZE);
   UWB_Data_Packet_Listener_t listener = {
       .type = UWB_DATA_MESSAGE_RAFT,
       .rxQueue = rxQueue

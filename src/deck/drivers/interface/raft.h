@@ -10,6 +10,8 @@
 /* Queue Constants */
 #define RAFT_RX_QUEUE_SIZE 5
 #define RAFT_RX_QUEUE_ITEM_SIZE sizeof(UWB_Data_Packet_t)
+#define RAFT_COMMAND_QUEUE_SIZE 30
+#define RAFT_COMMAND_QUEUE_ITEM_SIZE sizeof(Raft_Log_Command_t)
 
 /* Raft Constants */
 #define RAFT_LOG_SIZE_MAX 100
