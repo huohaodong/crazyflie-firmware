@@ -21,7 +21,7 @@ static TimerHandle_t raftLogApplyTimer;
 static Raft_Log_Item_t EMPTY_LOG_ITEM = {
     .term = 0,
     .index = 0,
-    .command = "NULL"
+    .command = {.type = RAFT_LOG_COMMAND_RESERVED}
 };
 // TODO: check
 static int raftLogFindByIndex(Raft_Log_t *raftLog, uint16_t logIndex) {
