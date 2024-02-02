@@ -1,8 +1,9 @@
 #include <stdlib.h>
 #include "FreeRTOS.h"
 #include "timers.h"
-#include "raft.h"
 #include "debug.h"
+#include "system.h"
+#include "raft.h"
 
 #ifndef RAFT_DEBUG_ENABLE
 #undef DEBUG_PRINT
@@ -196,6 +197,8 @@ static void raftLogApplyTimerCallback(TimerHandle_t timer) {
 }
 
 static void raftRxTask() {
+  systemWaitStart();
+
   UWB_Data_Packet_t dataRxPacket;
   while (1) {
     if (uwbReceiveDataPacketBlock(UWB_DATA_MESSAGE_RAFT, &dataRxPacket)) {
@@ -227,6 +230,8 @@ static void raftRxTask() {
 }
 
 static void raftCommandTask() {
+  systemWaitStart();
+
   Raft_Log_Command_t command;
   while (1) {
     // TODO: add command handlers
