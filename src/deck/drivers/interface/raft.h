@@ -11,7 +11,7 @@
 #define RAFT_RX_QUEUE_SIZE 5
 #define RAFT_RX_QUEUE_ITEM_SIZE sizeof(UWB_Data_Packet_t)
 #define RAFT_COMMAND_QUEUE_SIZE 10
-#define RAFT_COMMAND_QUEUE_ITEM_SIZE sizeof(Raft_Log_Command_t)
+#define RAFT_COMMAND_QUEUE_ITEM_SIZE sizeof(Raft_Log_Command_Queue_Item_t)
 
 /* Raft Constants */
 #define RAFT_LOG_SIZE_MAX 100
@@ -42,6 +42,13 @@ typedef struct {
   // TODO payload
 //  uint8_t payload[RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX];
 } Raft_Log_Command_t;
+
+typedef struct {
+  RAFT_LOG_COMMAND_TYPE type;
+  UWB_Address_t clientId;
+  uint16_t requestId;
+  uint16_t readIndex;
+} Raft_Log_Command_Queue_Item_t;
 
 typedef struct {
   uint16_t term;

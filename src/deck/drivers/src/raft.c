@@ -229,6 +229,35 @@ static void raftRxTask() {
   }
 }
 
+static void bufferRaftCommand(uint16_t readIndex, Raft_Log_Command_t *command) {
+  Raft_Log_Command_Queue_Item_t item = {
+      .type = command->type,
+      .clientId = command->clientId,
+      .requestId = command->requestId,
+      .readIndex = readIndex
+  };
+  if (xQueueSend(commandQueue, &item, M2T(0)) == pdFALSE) {
+    Raft_Log_Command_Queue_Item_t evicted;
+    xQueueReceive(commandQueue, &evicted, M2T(0));
+    DEBUG_PRINT(
+        "bufferRaftCommand: %u command buffer is full, evict command from %u, type = %d, requestId = %u, readIndex = %u.\n",
+        raftNode.me,
+        evicted.clientId,
+        evicted.type,
+        evicted.requestId,
+        evicted.readIndex
+    );
+    xQueueSend(commandQueue, &item, M2T(0));
+  }
+  DEBUG_PRINT("bufferRaftCommand: %u command buffer command from %u, type = %d, requestId = %u, readIndex = %u.",
+              raftNode.me,
+              item.clientId,
+              item.type,
+              item.requestId,
+              item.readIndex
+  );
+}
+
 static void raftCommandTask() {
   systemWaitStart();
 
