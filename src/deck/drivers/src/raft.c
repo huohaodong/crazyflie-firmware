@@ -15,6 +15,7 @@
 static QueueHandle_t rxQueue;
 static QueueHandle_t commandQueue;
 static TaskHandle_t raftRxTaskHandle;
+static TaskHandle_t raftCommandTaskHandle;
 static Raft_Node_t raftNode;
 static TimerHandle_t raftElectionTimer;
 static TimerHandle_t raftHeartbeatTimer;
@@ -197,7 +198,6 @@ static void raftLogApplyTimerCallback(TimerHandle_t timer) {
 static void raftRxTask() {
   UWB_Data_Packet_t dataRxPacket;
   while (1) {
-    // TODO: handlers
     if (uwbReceiveDataPacketBlock(UWB_DATA_MESSAGE_RAFT, &dataRxPacket)) {
       xSemaphoreTake(raftNode.mu, portMAX_DELAY);
       UWB_Address_t peer = dataRxPacket.header.srcAddress;
@@ -219,6 +219,46 @@ static void raftRxTask() {
           DEBUG_PRINT("raftRxTask: %u received unknown raft message type = %u.\n",
                             raftNode.me,
                             type);
+      }
+      xSemaphoreGive(raftNode.mu);
+    }
+    vTaskDelay(M2T(1));
+  }
+}
+
+static void raftCommandTask() {
+  Raft_Log_Command_t command;
+  while (1) {
+    // TODO: add command handlers
+    if (xQueueReceive(commandQueue, &command, portMAX_DELAY)) {
+      xSemaphoreTake(raftNode.mu, portMAX_DELAY);
+      DEBUG_PRINT("raftCommandTask: %u received command type = %u from %u, requestId = %u.\n",
+                  raftNode.me,
+                  command.type,
+                  command.clientId,
+                  command.requestId);
+      switch (command.type) {
+        case RAFT_LOG_COMMAND_RESERVED:
+          DEBUG_PRINT("raftCommandTask: %u received reserved command type = %u from %u.\n",
+                      raftNode.me,
+                      command.type,
+                      command.clientId);
+          break;
+        case RAFT_LOG_COMMAND_GET:
+          DEBUG_PRINT("raftCommandTask: %u received GET command from %u.\n",
+                      raftNode.me,
+                      command.clientId);
+          break;
+        case RAFT_LOG_COMMAND_PUT:
+          DEBUG_PRINT("raftCommandTask: %u received PUT command from %u.\n",
+                      raftNode.me,
+                      command.clientId);
+          break;
+        default:
+          DEBUG_PRINT("raftCommandTask: %u received unknown command type = %u from %u.\n",
+                            raftNode.me,
+                            command.type,
+                            command.clientId);
       }
       xSemaphoreGive(raftNode.mu);
     }
@@ -276,6 +316,8 @@ void raftInit() {
 
   xTaskCreate(raftRxTask, ADHOC_DECK_RAFT_RX_TASK_NAME, UWB_TASK_STACK_SIZE, NULL,
               ADHOC_DECK_TASK_PRI, &raftRxTaskHandle);
+  xTaskCreate(raftCommandTask, ADHOC_DECK_RAFT_COMMAND_TASK_NAME, UWB_TASK_STACK_SIZE, NULL,
+              ADHOC_DECK_TASK_PRI, &raftCommandTaskHandle);
 }
 
 // TODO: leader broadcasting, follower uni-casting

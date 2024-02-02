@@ -30,6 +30,8 @@ typedef enum {
 
 typedef enum {
   RAFT_LOG_COMMAND_RESERVED,
+  RAFT_LOG_COMMAND_GET,
+  RAFT_LOG_COMMAND_PUT
   // TODO
 } RAFT_LOG_COMMAND_TYPE;
 
