@@ -11,7 +11,7 @@
 #define RAFT_RX_QUEUE_SIZE 5
 #define RAFT_RX_QUEUE_ITEM_SIZE sizeof(UWB_Data_Packet_t)
 #define RAFT_COMMAND_QUEUE_SIZE 10
-#define RAFT_COMMAND_QUEUE_ITEM_SIZE sizeof(Raft_Log_Command_Queue_Item_t)
+#define RAFT_COMMAND_QUEUE_ITEM_SIZE sizeof(Raft_Log_Command_Token_t)
 
 /* Raft Constants */
 #define RAFT_LOG_SIZE_MAX 100
@@ -39,16 +39,14 @@ typedef struct {
   RAFT_LOG_COMMAND_TYPE type;
   UWB_Address_t clientId;
   uint16_t requestId;
+  uint16_t readIndex; // TODO: check to remove
+} Raft_Log_Command_Token_t;
+
+typedef struct {
+  Raft_Log_Command_Token_t token;
   // TODO payload
 //  uint8_t payload[RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX];
 } Raft_Log_Command_t;
-
-typedef struct {
-  RAFT_LOG_COMMAND_TYPE type;
-  UWB_Address_t clientId;
-  uint16_t requestId;
-  uint16_t readIndex;
-} Raft_Log_Command_Queue_Item_t;
 
 typedef struct {
   uint16_t term;
@@ -83,7 +81,9 @@ typedef enum {
   RAFT_REQUEST_VOTE,
   RAFT_REQUEST_VOTE_REPLY,
   RAFT_APPEND_ENTRIES,
-  RAFT_APPEND_ENTRIES_REPLY
+  RAFT_APPEND_ENTRIES_REPLY,
+  RAFT_COMMAND_REQUEST,
+  RAFT_COMMAND_REPLY
 } RAFT_MESSAGE_TYPE;
 
 typedef struct {
@@ -122,6 +122,17 @@ typedef struct {
   uint16_t nextIndex; /* 0 represents null */
 } __attribute__((packed)) Raft_Append_Entries_Reply_t;
 
+typedef struct {
+  RAFT_MESSAGE_TYPE type;
+  Raft_Log_Command_t command;
+} __attribute__((packed)) Raft_Command_Args_t;
+
+typedef struct {
+  RAFT_MESSAGE_TYPE type;
+  uint16_t leaderApply;
+} __attribute__((packed)) Raft_Command_Reply_t;
+
+/* Raft Server Operations */
 void raftInit();
 void raftSendRequestVote(UWB_Address_t peerAddress);
 void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t *args);
@@ -131,5 +142,14 @@ void raftSendAppendEntries(UWB_Address_t peerAddress);
 void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Args_t *args);
 void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool success, uint16_t nextIndex);
 void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entries_Reply_t *reply);
+void raftSendCommand(Raft_Command_Args_t *args);
+void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args);
+void raftSendCommandReply(UWB_Address_t clientId, Raft_Command_Reply_t *reply);
+void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply);
+
+/* Raft Client Operations */
+uint16_t raftPropose(Raft_Command_Args_t *args);
+bool raftProposeCheck(uint16_t requestId);
+bool raftProposeAndWait(Raft_Command_Args_t *args, int wait);
 
 #endif

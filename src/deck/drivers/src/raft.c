@@ -21,10 +21,12 @@ static Raft_Node_t raftNode;
 static TimerHandle_t raftElectionTimer;
 static TimerHandle_t raftHeartbeatTimer;
 static TimerHandle_t raftLogApplyTimer;
+static uint16_t raftClientRequestId;
+static uint16_t raftLeaderApply;
 static Raft_Log_Item_t EMPTY_LOG_ITEM = {
     .term = 0,
     .index = 0,
-    .command = {.type = RAFT_LOG_COMMAND_RESERVED, .clientId = UWB_DEST_EMPTY, .requestId = 0}
+    .command = {.token.type = RAFT_LOG_COMMAND_RESERVED, .token.clientId = UWB_DEST_EMPTY, .token.requestId = 0}
 };
 // TODO: check
 static int raftLogFindByIndex(Raft_Log_t *raftLog, uint16_t logIndex) {
@@ -218,6 +220,12 @@ static void raftRxTask() {
         case RAFT_APPEND_ENTRIES_REPLY:
           raftProcessAppendEntriesReply(peer, (Raft_Append_Entries_Reply_t *) dataRxPacket.payload);
           break;
+        case RAFT_COMMAND_REQUEST:
+//          raftProcessRaftCommand()
+          break;
+        case RAFT_COMMAND_REPLY:
+//          raftProcessCommandReply();
+          break;
         default:
           DEBUG_PRINT("raftRxTask: %u received unknown raft message type = %u.\n",
                             raftNode.me,
@@ -228,16 +236,15 @@ static void raftRxTask() {
     vTaskDelay(M2T(1));
   }
 }
-
+// TODO: check
 static void bufferRaftCommand(uint16_t readIndex, Raft_Log_Command_t *command) {
-  Raft_Log_Command_Queue_Item_t item = {
-      .type = command->type,
-      .clientId = command->clientId,
-      .requestId = command->requestId,
+  Raft_Log_Command_Token_t token = {
+      .clientId = command->token.clientId,
+      .requestId = command->token.requestId,
       .readIndex = readIndex
   };
-  if (xQueueSend(commandQueue, &item, M2T(0)) == pdFALSE) {
-    Raft_Log_Command_Queue_Item_t evicted;
+  if (xQueueSend(commandQueue, &token, M2T(0)) == pdFALSE) {
+    Raft_Log_Command_Token_t evicted;
     xQueueReceive(commandQueue, &evicted, M2T(0));
     DEBUG_PRINT(
         "bufferRaftCommand: %u command buffer is full, evict command from %u, type = %d, requestId = %u, readIndex = %u.\n",
@@ -247,52 +254,53 @@ static void bufferRaftCommand(uint16_t readIndex, Raft_Log_Command_t *command) {
         evicted.requestId,
         evicted.readIndex
     );
-    xQueueSend(commandQueue, &item, M2T(0));
+    xQueueSend(commandQueue, &token, M2T(0));
   }
   DEBUG_PRINT("bufferRaftCommand: %u command buffer command from %u, type = %d, requestId = %u, readIndex = %u.",
               raftNode.me,
-              item.clientId,
-              item.type,
-              item.requestId,
-              item.readIndex
+              token.clientId,
+              token.type,
+              token.requestId,
+              token.readIndex
   );
 }
 
 static void raftCommandTask() {
   systemWaitStart();
 
-  Raft_Log_Command_t command;
+  Raft_Log_Command_Token_t token;
   while (1) {
     // TODO: add command handlers
-    if (xQueueReceive(commandQueue, &command, portMAX_DELAY)) {
+    if (xQueueReceive(commandQueue, &token, portMAX_DELAY)) {
       xSemaphoreTake(raftNode.mu, portMAX_DELAY);
-      DEBUG_PRINT("raftCommandTask: %u received command type = %u from %u, requestId = %u.\n",
+      DEBUG_PRINT("raftCommandTask: %u received command type = %u from %u, requestId = %u, readIndex = %u.\n",
                   raftNode.me,
-                  command.type,
-                  command.clientId,
-                  command.requestId);
-      switch (command.type) {
+                  token.type,
+                  token.clientId,
+                  token.requestId,
+                  token.readIndex);
+      switch (token.type) {
         case RAFT_LOG_COMMAND_RESERVED:
           DEBUG_PRINT("raftCommandTask: %u received reserved command type = %u from %u.\n",
                       raftNode.me,
-                      command.type,
-                      command.clientId);
+                      token.type,
+                      token.clientId);
           break;
         case RAFT_LOG_COMMAND_GET:
           DEBUG_PRINT("raftCommandTask: %u received GET command from %u.\n",
                       raftNode.me,
-                      command.clientId);
+                      token.clientId);
           break;
         case RAFT_LOG_COMMAND_PUT:
           DEBUG_PRINT("raftCommandTask: %u received PUT command from %u.\n",
                       raftNode.me,
-                      command.clientId);
+                      token.clientId);
           break;
         default:
           DEBUG_PRINT("raftCommandTask: %u received unknown command type = %u from %u.\n",
                             raftNode.me,
-                            command.type,
-                            command.clientId);
+                            token.type,
+                            token.clientId);
       }
       xSemaphoreGive(raftNode.mu);
     }
@@ -649,4 +657,41 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
       }
     }
   }
+}
+
+void raftSendCommand(Raft_Command_Args_t *args) {
+  // TODO
+}
+
+void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
+  // TODO
+}
+
+void raftSendCommandReply(UWB_Address_t clientId, Raft_Command_Reply_t *reply) {
+  // TODO
+}
+
+void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply) {
+  // TODO
+  raftLeaderApply = MAX(raftLeaderApply, reply->leaderApply);
+}
+
+uint16_t raftPropose(Raft_Command_Args_t *args) {
+  // TODO
+  uint16_t requestId = raftClientRequestId++;
+  raftSendCommand(args);
+  return requestId;
+}
+
+bool raftProposeCheck(uint16_t requestId) {
+  if (raftLeaderApply >= requestId) {
+    return true;
+  }
+  return false;
+}
+
+bool raftProposeAndWait(Raft_Command_Args_t *args, int wait) {
+  uint16_t requestId = raftPropose(args);
+  vTaskDelay(M2T(wait));
+  return raftProposeCheck(requestId);
 }
