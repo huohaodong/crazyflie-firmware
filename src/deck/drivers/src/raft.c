@@ -14,7 +14,7 @@
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 
 static QueueHandle_t rxQueue;
-static QueueHandle_t commandQueue;
+static QueueHandle_t commandBufferQueue;
 static TaskHandle_t raftRxTaskHandle;
 static TaskHandle_t raftCommandTaskHandle;
 static Raft_Node_t raftNode;
@@ -238,69 +238,68 @@ static void raftRxTask() {
 }
 // TODO: check
 static void bufferRaftCommand(uint16_t readIndex, Raft_Log_Command_t *command) {
-  Raft_Log_Command_Token_t token = {
-      .clientId = command->token.clientId,
-      .requestId = command->token.requestId,
+  Raft_Log_Command_Buffer_Item_t item = {
+      .token = command->token,
       .readIndex = readIndex
   };
-  if (xQueueSend(commandQueue, &token, M2T(0)) == pdFALSE) {
-    Raft_Log_Command_Token_t evicted;
-    xQueueReceive(commandQueue, &evicted, M2T(0));
+  if (xQueueSend(commandBufferQueue, &item, M2T(0)) == pdFALSE) {
+    Raft_Log_Command_Buffer_Item_t evicted;
+    xQueueReceive(commandBufferQueue, &evicted, M2T(0));
     DEBUG_PRINT(
         "bufferRaftCommand: %u command buffer is full, evict command from %u, type = %d, requestId = %u, readIndex = %u.\n",
         raftNode.me,
-        evicted.clientId,
-        evicted.type,
-        evicted.requestId,
+        evicted.token.clientId,
+        evicted.token.type,
+        evicted.token.requestId,
         evicted.readIndex
     );
-    xQueueSend(commandQueue, &token, M2T(0));
+    xQueueSend(commandBufferQueue, &item, M2T(0));
   }
-  DEBUG_PRINT("bufferRaftCommand: %u command buffer command from %u, type = %d, requestId = %u, readIndex = %u.",
+  DEBUG_PRINT("bufferRaftCommand: %u buffer command from %u, type = %d, requestId = %u, readIndex = %u.\n",
               raftNode.me,
-              token.clientId,
-              token.type,
-              token.requestId,
-              token.readIndex
+              item.token.clientId,
+              item.token.type,
+              item.token.requestId,
+              item.readIndex
   );
 }
 
-static void raftCommandTask() {
+static void raftCommandBufferConsumeTask() {
   systemWaitStart();
 
-  Raft_Log_Command_Token_t token;
+  Raft_Log_Command_Buffer_Item_t item;
   while (1) {
     // TODO: add command handlers
-    if (xQueueReceive(commandQueue, &token, portMAX_DELAY)) {
+    if (xQueueReceive(commandBufferQueue, &item, portMAX_DELAY)) {
       xSemaphoreTake(raftNode.mu, portMAX_DELAY);
-      DEBUG_PRINT("raftCommandTask: %u received command type = %u from %u, requestId = %u, readIndex = %u.\n",
+      DEBUG_PRINT("raftCommandTask: %u consume command type = %u from %u, requestId = %u, readIndex = %u.\n",
                   raftNode.me,
-                  token.type,
-                  token.clientId,
-                  token.requestId,
-                  token.readIndex);
-      switch (token.type) {
+                  item.token.type,
+                  item.token.clientId,
+                  item.token.requestId,
+                  item.readIndex);
+      switch (item.token.type) {
         case RAFT_LOG_COMMAND_RESERVED:
-          DEBUG_PRINT("raftCommandTask: %u received reserved command type = %u from %u.\n",
+          DEBUG_PRINT("raftCommandTask: %u consume reserved command type = %u from %u.\n",
                       raftNode.me,
-                      token.type,
-                      token.clientId);
+                      item.token.type,
+                      item.token.clientId);
           break;
         case RAFT_LOG_COMMAND_GET:
-          DEBUG_PRINT("raftCommandTask: %u received GET command from %u.\n",
+          DEBUG_PRINT("raftCommandTask: %u consume GET command from %u.\n",
                       raftNode.me,
-                      token.clientId);
+                      item.token.clientId);
           break;
         case RAFT_LOG_COMMAND_PUT:
-          DEBUG_PRINT("raftCommandTask: %u received PUT command from %u.\n",
+          DEBUG_PRINT("raftCommandTask: %u consume PUT command from %u.\n",
                       raftNode.me,
-                      token.clientId);
+                      item.token.clientId);
           break;
         default:
-          DEBUG_PRINT("raftCommandTask: %u received unknown command type = %u from %u.\n",
+          DEBUG_PRINT("raftCommandTask: %u consume unknown command type = %u from %u.\n",
                             raftNode.me,
-                            token.type,
-                            token.clientId);
+                            item.token.type,
+                            item.token.clientId);
       }
       xSemaphoreGive(raftNode.mu);
     }
@@ -311,7 +310,7 @@ static void raftCommandTask() {
 void raftInit() {
   xSemaphoreCreateMutex();
   rxQueue = xQueueCreate(RAFT_RX_QUEUE_SIZE, RAFT_RX_QUEUE_ITEM_SIZE);
-  commandQueue = xQueueCreate(RAFT_COMMAND_QUEUE_SIZE, RAFT_COMMAND_QUEUE_ITEM_SIZE);
+  commandBufferQueue = xQueueCreate(RAFT_COMMAND_BUFFER_QUEUE_SIZE, RAFT_COMMAND_BUFFER_QUEUE_ITEM_SIZE);
   UWB_Data_Packet_Listener_t listener = {
       .type = UWB_DATA_MESSAGE_RAFT,
       .rxQueue = rxQueue
@@ -358,7 +357,7 @@ void raftInit() {
 
   xTaskCreate(raftRxTask, ADHOC_DECK_RAFT_RX_TASK_NAME, UWB_TASK_STACK_SIZE, NULL,
               ADHOC_DECK_TASK_PRI, &raftRxTaskHandle);
-  xTaskCreate(raftCommandTask, ADHOC_DECK_RAFT_COMMAND_TASK_NAME, UWB_TASK_STACK_SIZE, NULL,
+  xTaskCreate(raftCommandBufferConsumeTask, ADHOC_DECK_RAFT_COMMAND_BUFFER_CONSUME_TASK_NAME, UWB_TASK_STACK_SIZE, NULL,
               ADHOC_DECK_TASK_PRI, &raftCommandTaskHandle);
 }
 
