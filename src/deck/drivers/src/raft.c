@@ -147,6 +147,9 @@ static void convertToFollower(Raft_Node_t *node) {
 static void convertToLeader(Raft_Node_t *node) {
   node->currentState = RAFT_STATE_LEADER;
   node->currentLeader = node->me;
+  for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+    node->peerVote[peer] = false;
+  }
 }
 
 static void convertToCandidate(Raft_Node_t *node) {
@@ -390,6 +393,8 @@ void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t 
     );
     raftNode.currentTerm = args->term;
     convertToFollower(&raftNode);
+    raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, true);
+    return;
   }
   if (raftNode.voteFor != RAFT_VOTE_FOR_NO_ONE && raftNode.voteFor != args->candidateId) {
     DEBUG_PRINT("raftProcessRequestVote: I %u have already granted vote to %u this term, don't grant vote.\n",
@@ -500,9 +505,10 @@ void raftSendAppendEntries(UWB_Address_t peerAddress) {
   // TODO: check
   int startItemIndex = preLogItemIndex + 1;
   int endItemIndex = MIN(preLogItemIndex + RAFT_LOG_ENTRIES_SIZE_MAX, raftNode.log.size - 1);
-  DEBUG_PRINT("raftSendAppendEntries: startItemIndex = %u, endItemIndex = %u.\n",
+  DEBUG_PRINT("raftSendAppendEntries: startItemIndex = %u, endItemIndex = %u, matchIndex = %u.\n",
               startItemIndex,
-              endItemIndex);
+              endItemIndex,
+              raftNode.matchIndex[peerAddress]);
   /* Include log items with item index in [startItemIndex, endItemIndex] */
   args->entryCount = 0;
   for (int i = startItemIndex; i <= endItemIndex; i++) {
@@ -552,11 +558,13 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
   int matchedItemIndex = raftLogFindMatched(&raftNode.log, args->prevLogIndex, args->prevLogTerm);
   if (matchedItemIndex == -1) {
     DEBUG_PRINT(
-        "raftProcessAppendEntries: %u log doesn't contain an entry at prevLogIndex = %u whose term matches prevLogTerm = %u.\n",
+        "raftProcessAppendEntries: %u log doesn't contain an entry at prevLogIndex = %u whose term matches prevLogTerm = %u, log size = %u, last applied = %u.\n",
         raftNode.me,
         args->prevLogIndex,
-        args->prevLogTerm);
-    raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, false, 0);
+        args->prevLogTerm,
+        raftNode.log.size,
+        raftNode.lastApplied);
+    raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, false, raftNode.lastApplied + 1);
     return;
   }
   /* If an existing entry conflicts with a new one (same index but different terms), delete the existing entry and all
@@ -654,8 +662,20 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
                     raftNode.log.items[matchedIndex].term - 1
         );
       } else {
-        raftNode.nextIndex[peerAddress] = MAX(raftNode.matchIndex[peerAddress] + 1, raftNode.log.items[itemIndex].index);
-        raftSendAppendEntries(peerAddress);
+        // TODO: To tolerate node restarting without persistent log entries, may cause inconsistency.
+        if (reply->nextIndex != 0) {
+          if (reply->nextIndex < raftNode.matchIndex[peerAddress]) {
+            DEBUG_PRINT("raftProcessAppendEntriesReply: peer %u may restart, resync all log entries.\n", peerAddress);
+            raftNode.nextIndex[peerAddress] = 1;
+            raftNode.matchIndex[peerAddress] = 0;
+          } else {
+            raftNode.nextIndex[peerAddress] = reply->nextIndex;
+            raftNode.matchIndex[peerAddress] = raftNode.nextIndex[peerAddress] - 1;
+          }
+        } else {
+          raftNode.nextIndex[peerAddress] = raftNode.log.items[itemIndex].index;
+          DEBUG_PRINT("raftProcessAppendEntriesReply: Try to adjust next index to %u.\n", raftNode.nextIndex[peerAddress]);
+        }
       }
     }
   }

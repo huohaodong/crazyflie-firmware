@@ -5,7 +5,7 @@
 #include "semphr.h"
 #include "routing.h"
 
-//#define RAFT_DEBUG_ENABLE
+#define RAFT_DEBUG_ENABLE
 
 /* Queue Constants */
 #define RAFT_RX_QUEUE_SIZE 5
@@ -17,7 +17,7 @@
 #define RAFT_LOG_SIZE_MAX 100
 #define RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX 5
 #define RAFT_VOTE_FOR_NO_ONE UWB_DEST_EMPTY
-#define RAFT_HEARTBEAT_INTERVAL 150 // default 150ms
+#define RAFT_HEARTBEAT_INTERVAL 1000 // default 150ms
 #define RAFT_ELECTION_TIMEOUT (5 * RAFT_HEARTBEAT_INTERVAL)
 #define RAFT_LOG_APPLY_INTERVAL 50 // default 50ms
 #define RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX 10 // TODO: fine tuning
