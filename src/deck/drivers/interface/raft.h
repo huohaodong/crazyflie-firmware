@@ -148,7 +148,7 @@ void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool s
 void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entries_Reply_t *reply);
 void raftSendCommand(Raft_Command_Args_t *args);
 void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args);
-void raftSendCommandReply(UWB_Address_t clientId, Raft_Command_Reply_t *reply);
+void raftSendCommandReply(UWB_Address_t clientId, uint16_t leaderApply);
 void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply);
 
 /* Raft Client Operations */

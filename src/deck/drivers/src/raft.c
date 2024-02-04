@@ -268,40 +268,15 @@ static void raftCommandBufferConsumeTask() {
   systemWaitStart();
 
   Raft_Log_Command_Buffer_Item_t item;
+
   while (1) {
-    // TODO: add command handlers
-    if (xQueueReceive(commandBufferQueue, &item, portMAX_DELAY)) {
-      xSemaphoreTake(raftNode.mu, portMAX_DELAY);
-      DEBUG_PRINT("raftCommandTask: %u consume command type = %u from %u, requestId = %u, readIndex = %u.\n",
-                  raftNode.me,
-                  item.token.type,
-                  item.token.clientId,
-                  item.token.requestId,
-                  item.readIndex);
-      switch (item.token.type) {
-        case RAFT_LOG_COMMAND_RESERVED:
-          DEBUG_PRINT("raftCommandTask: %u consume reserved command type = %u from %u.\n",
-                      raftNode.me,
-                      item.token.type,
-                      item.token.clientId);
-          break;
-        case RAFT_LOG_COMMAND_GET:
-          DEBUG_PRINT("raftCommandTask: %u consume GET command from %u.\n",
-                      raftNode.me,
-                      item.token.clientId);
-          break;
-        case RAFT_LOG_COMMAND_PUT:
-          DEBUG_PRINT("raftCommandTask: %u consume PUT command from %u.\n",
-                      raftNode.me,
-                      item.token.clientId);
-          break;
-        default:
-          DEBUG_PRINT("raftCommandTask: %u consume unknown command type = %u from %u.\n",
-                            raftNode.me,
-                            item.token.type,
-                            item.token.clientId);
+    if (xQueuePeek(commandBufferQueue, &item, portMAX_DELAY)) {
+      if (item.readIndex <= raftNode.lastApplied) {
+        xQueueReceive(commandBufferQueue, &item, M2T(0));
+        raftSendCommandReply(item.token.clientId, raftNode.lastApplied);
+      } else {
+        vTaskDelay(M2T(RAFT_HEARTBEAT_INTERVAL + 10));
       }
-      xSemaphoreGive(raftNode.mu);
     }
     vTaskDelay(M2T(1));
   }
@@ -666,7 +641,7 @@ void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
   // TODO
 }
 
-void raftSendCommandReply(UWB_Address_t clientId, Raft_Command_Reply_t *reply) {
+void raftSendCommandReply(UWB_Address_t clientId, uint16_t leaderApply) {
   // TODO
 }
 
