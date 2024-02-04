@@ -237,10 +237,10 @@ static void raftRxTask() {
           raftProcessAppendEntriesReply(peer, (Raft_Append_Entries_Reply_t *) dataRxPacket.payload);
           break;
         case RAFT_COMMAND_REQUEST:
-//          raftProcessRaftCommand()
+          raftProcessCommand(peer, (Raft_Command_Args_t *) dataRxPacket.payload);
           break;
         case RAFT_COMMAND_REPLY:
-//          raftProcessCommandReply();
+          raftProcessCommandReply(peer, (Raft_Command_Reply_t *) dataRxPacket.payload);
           break;
         default:
           DEBUG_PRINT("raftRxTask: %u received unknown raft message type = %u.\n",
@@ -719,7 +719,6 @@ void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *re
               peerAddress,
               reply->latestApplied,
               reply->leaderAddress);
-
   if (reply->success) {
     raftLeaderApply = MAX(raftLeaderApply, reply->latestApplied);
   } else {
