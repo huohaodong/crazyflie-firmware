@@ -39,16 +39,14 @@ typedef struct {
   RAFT_LOG_COMMAND_TYPE type;
   UWB_Address_t clientId;
   uint16_t requestId;
-} Raft_Log_Command_Token_t;
-
-typedef struct {
-  Raft_Log_Command_Token_t token;
   // TODO payload
 //  uint8_t payload[RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX];
 } Raft_Log_Command_t;
 
 typedef struct {
-  Raft_Log_Command_Token_t token;
+  RAFT_LOG_COMMAND_TYPE type;
+  UWB_Address_t clientId;
+  uint16_t requestId;
   uint16_t readIndex;
 } Raft_Log_Command_Buffer_Item_t;
 
@@ -152,8 +150,8 @@ void raftSendCommandReply(UWB_Address_t clientId, uint16_t leaderApply);
 void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply);
 
 /* Raft Client Operations */
-uint16_t raftPropose(Raft_Command_Args_t *args);
-bool raftProposeCheck(uint16_t requestId);
-bool raftProposeAndWait(Raft_Command_Args_t *args, int wait);
+uint16_t raftProposeNew(RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t size);
+void raftProposeRetry(uint16_t requestId, RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t size);
+bool raftProposeCheck(uint16_t requestId, int wait);
 
 #endif

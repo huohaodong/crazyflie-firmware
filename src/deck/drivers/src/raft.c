@@ -26,7 +26,7 @@ static uint16_t raftLeaderApply;
 static Raft_Log_Item_t EMPTY_LOG_ITEM = {
     .term = 0,
     .index = 0,
-    .command = {.token.type = RAFT_LOG_COMMAND_RESERVED, .token.clientId = UWB_DEST_EMPTY, .token.requestId = 0}
+    .command = {.type = RAFT_LOG_COMMAND_RESERVED, .clientId = UWB_DEST_EMPTY, .requestId = 0} // TODO: init payload
 };
 // TODO: check
 static int raftLogFindByIndex(Raft_Log_t *raftLog, uint16_t logIndex) {
@@ -239,7 +239,9 @@ static void raftRxTask() {
 // TODO: check
 static void bufferRaftCommand(uint16_t readIndex, Raft_Log_Command_t *command) {
   Raft_Log_Command_Buffer_Item_t item = {
-      .token = command->token,
+      .type = command->type,
+      .clientId = command->clientId,
+      .requestId = command->requestId,
       .readIndex = readIndex
   };
   if (xQueueSend(commandBufferQueue, &item, M2T(0)) == pdFALSE) {
@@ -248,18 +250,18 @@ static void bufferRaftCommand(uint16_t readIndex, Raft_Log_Command_t *command) {
     DEBUG_PRINT(
         "bufferRaftCommand: %u command buffer is full, evict command from %u, type = %d, requestId = %u, readIndex = %u.\n",
         raftNode.me,
-        evicted.token.clientId,
-        evicted.token.type,
-        evicted.token.requestId,
+        evicted.clientId,
+        evicted.type,
+        evicted.requestId,
         evicted.readIndex
     );
     xQueueSend(commandBufferQueue, &item, M2T(0));
   }
   DEBUG_PRINT("bufferRaftCommand: %u buffer command from %u, type = %d, requestId = %u, readIndex = %u.\n",
               raftNode.me,
-              item.token.clientId,
-              item.token.type,
-              item.token.requestId,
+              item.clientId,
+              item.type,
+              item.requestId,
               item.readIndex
   );
 }
@@ -273,7 +275,7 @@ static void raftCommandBufferConsumeTask() {
     if (xQueuePeek(commandBufferQueue, &item, portMAX_DELAY)) {
       if (item.readIndex <= raftNode.lastApplied) {
         xQueueReceive(commandBufferQueue, &item, M2T(0));
-        raftSendCommandReply(item.token.clientId, raftNode.lastApplied);
+        raftSendCommandReply(item.clientId, raftNode.lastApplied);
       } else {
         vTaskDelay(M2T(RAFT_HEARTBEAT_INTERVAL + 10));
       }
@@ -650,22 +652,42 @@ void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *re
   raftLeaderApply = MAX(raftLeaderApply, reply->leaderApply);
 }
 
-uint16_t raftPropose(Raft_Command_Args_t *args) {
-  // TODO
-  uint16_t requestId = raftClientRequestId++;
-  raftSendCommand(args);
+uint16_t getNextRequestId() {
+  return raftClientRequestId++;
+}
+
+uint16_t raftProposeNew(RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t size) {
+  uint16_t requestId = getNextRequestId();
+  Raft_Command_Args_t args = {
+      .type = RAFT_COMMAND_REQUEST,
+      .command = {
+          .type = type,
+          .clientId = raftNode.me,
+          .requestId = requestId
+      },
+      // TODO: init payload
+  };
+  raftSendCommand(&args);
   return requestId;
 }
 
-bool raftProposeCheck(uint16_t requestId) {
+void raftProposeRetry(uint16_t requestId, RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t size) {
+  Raft_Command_Args_t args = {
+      .type = RAFT_COMMAND_REQUEST,
+      .command = {
+          .type = type,
+          .clientId = raftNode.me,
+          .requestId = requestId
+      },
+      // TODO: init payload
+  };
+  raftSendCommand(&args);
+}
+
+bool raftProposeCheck(uint16_t requestId, int wait) {
   if (raftLeaderApply >= requestId) {
     return true;
   }
-  return false;
-}
-
-bool raftProposeAndWait(Raft_Command_Args_t *args, int wait) {
-  uint16_t requestId = raftPropose(args);
   vTaskDelay(M2T(wait));
-  return raftProposeCheck(requestId);
+  return raftLeaderApply >= requestId;
 }
