@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include "FreeRTOS.h"
 #include "timers.h"
 #include "debug.h"
@@ -641,9 +642,20 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
     }
   }
 }
-
+// TODO: check
 void raftSendCommand(Raft_Command_Args_t *args) {
-  // TODO
+  UWB_Data_Packet_t dataTxPacket;
+  dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
+  dataTxPacket.header.srcAddress = raftNode.me;
+  dataTxPacket.header.destAddress = raftNode.currentLeader;
+  dataTxPacket.header.ttl = 10;
+  dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Command_Args_t);
+  memcpy(dataTxPacket.payload, args, sizeof (Raft_Command_Args_t));
+  DEBUG_PRINT("raftSendRequestVote: %u send command to leader %u, requestId = %u.\n",
+              raftNode.me,
+              raftNode.currentLeader,
+              args->command.requestId);
+  uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
