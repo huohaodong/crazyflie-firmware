@@ -692,8 +692,25 @@ void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
   bufferRaftCommand(raftNode.log.items[raftNode.log.size - 1].index, &args->command);
 }
 
-void raftSendCommandReply(UWB_Address_t clientId, uint16_t leaderApply, UWB_Address_t leaderAddress, bool success) {
-  // TODO
+void raftSendCommandReply(UWB_Address_t clientId, uint16_t latestApplied, UWB_Address_t leaderAddress, bool success) {
+  UWB_Data_Packet_t dataTxPacket;
+  dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
+  dataTxPacket.header.srcAddress = raftNode.me;
+  dataTxPacket.header.destAddress = clientId;
+  dataTxPacket.header.ttl = 10;
+  dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Command_Reply_t);
+  Raft_Command_Reply_t *reply = (Raft_Command_Reply_t *) &dataTxPacket.payload;
+  reply->type = RAFT_COMMAND_REPLY;
+  reply->latestApplied = latestApplied;
+  reply->leaderAddress = leaderAddress;
+  reply->success = success;
+  DEBUG_PRINT("raftSendRequestVote: %u send command reply to client %u, latestApplied = %u, leader = %u, success = %d.\n",
+              raftNode.me,
+              clientId,
+              latestApplied,
+              leaderAddress,
+              success);
+  uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply) {
@@ -704,7 +721,7 @@ void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *re
 uint16_t getNextRequestId() {
   return raftClientRequestId++;
 }
-
+// TODO: check
 uint16_t raftProposeNew(RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t size) {
   uint16_t requestId = getNextRequestId();
   Raft_Command_Args_t args = {
@@ -719,7 +736,7 @@ uint16_t raftProposeNew(RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t s
   raftSendCommand(&args);
   return requestId;
 }
-
+// TODO: check
 void raftProposeRetry(uint16_t requestId, RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t size) {
   Raft_Command_Args_t args = {
       .type = RAFT_COMMAND_REQUEST,
@@ -732,7 +749,7 @@ void raftProposeRetry(uint16_t requestId, RAFT_LOG_COMMAND_TYPE type, uint8_t *p
   };
   raftSendCommand(&args);
 }
-
+// TODO: check
 bool raftProposeCheck(uint16_t requestId, int wait) {
   if (raftLeaderApply >= requestId) {
     return true;
