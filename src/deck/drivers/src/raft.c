@@ -81,7 +81,14 @@ static int raftLogGetLastLogItemByTerm(Raft_Log_t *raftLog, uint16_t logTerm) {
 // TODO: check
 static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
   // TODO
-  DEBUG_PRINT("raftLogApply: Apply log index = %u.\n", raftLog->items[logItemIndex].index);
+  DEBUG_PRINT("raftLogApply: Apply log index = %u, term = %u, clientId = %u, requestId = %u.\n",
+              raftLog->items[logItemIndex].index,
+              raftLog->items[logItemIndex].term,
+              raftLog->items[logItemIndex].command.clientId,
+              raftLog->items[logItemIndex].command.requestId);
+  uint16_t clientId = raftLog->items[logItemIndex].command.clientId;
+  uint16_t requestId = raftLog->items[logItemIndex].command.requestId;
+  raftNode.appliedRequestId[clientId] = MAX(raftNode.appliedRequestId[clientId], requestId);
 }
 // TODO: check
 static void raftLogAppend(Raft_Log_t *raftLog, uint16_t logTerm, Raft_Log_Command_t command) {

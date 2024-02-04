@@ -77,6 +77,8 @@ typedef struct {
   uint16_t nextIndex[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX]; /* for each server, index of the next log entry to send to that server (initialized to leader last log index + 1) */
   uint16_t matchIndex[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX]; /* for each server, index of highest log entry known to be replicated on server (initialized to 0, increases monotonically) */
   Time_t lastHeartbeatTime; /* heartbeat used for trigger leader election */
+  /* State for client */
+  uint16_t appliedRequestId[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX]; /* latest request id applied to the state machine for each client */
 } Raft_Node_t;
 
 typedef enum {
