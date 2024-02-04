@@ -691,7 +691,7 @@ void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
   raftLogAppend(&raftNode.log, raftNode.currentTerm, args->command);
   bufferRaftCommand(raftNode.log.items[raftNode.log.size - 1].index, &args->command);
 }
-
+// TODO: check
 void raftSendCommandReply(UWB_Address_t clientId, uint16_t latestApplied, UWB_Address_t leaderAddress, bool success) {
   UWB_Data_Packet_t dataTxPacket;
   dataTxPacket.header.type = UWB_DATA_MESSAGE_RAFT;
@@ -712,10 +712,25 @@ void raftSendCommandReply(UWB_Address_t clientId, uint16_t latestApplied, UWB_Ad
               success);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
-
+// TODO: check
 void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply) {
-  // TODO
-  raftLeaderApply = MAX(raftLeaderApply, reply->latestApplied);
+  DEBUG_PRINT("raftProcessCommandReply: %u received command reply from %u, latestApplied = %u, leader = %u.\n",
+              raftNode.me,
+              peerAddress,
+              reply->latestApplied,
+              reply->leaderAddress);
+
+  if (reply->success) {
+    raftLeaderApply = MAX(raftLeaderApply, reply->latestApplied);
+  } else {
+    if (reply->leaderAddress != raftNode.currentLeader) {
+      DEBUG_PRINT("raftProcessCommandReply: %u think current leader is %u not %u.\n",
+                  peerAddress,
+                  reply->leaderAddress,
+                  raftNode.currentLeader);
+      // TODO: ignore or retry?
+    }
+  }
 }
 
 uint16_t getNextRequestId() {
