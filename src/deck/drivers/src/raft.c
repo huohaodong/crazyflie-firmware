@@ -498,9 +498,11 @@ void raftSendAppendEntries(UWB_Address_t peerAddress) {
   args->prevLogIndex = raftNode.log.items[preLogItemIndex].index;
   args->prevLogTerm = raftNode.log.items[preLogItemIndex].term;
   // TODO: check
-  int nextItemIndex = preLogItemIndex + 1;
-  int startItemIndex = nextItemIndex;
-  int endItemIndex = MIN(RAFT_LOG_SIZE_MAX - 1, startItemIndex + RAFT_LOG_ENTRIES_SIZE_MAX - 1);
+  int startItemIndex = preLogItemIndex + 1;
+  int endItemIndex = MIN(preLogItemIndex + RAFT_LOG_ENTRIES_SIZE_MAX, raftNode.log.size - 1);
+  DEBUG_PRINT("raftSendAppendEntries: startItemIndex = %u, endItemIndex = %u.\n",
+              startItemIndex,
+              endItemIndex);
   /* Include log items with item index in [startItemIndex, endItemIndex] */
   args->entryCount = 0;
   for (int i = startItemIndex; i <= endItemIndex; i++) {
@@ -508,7 +510,11 @@ void raftSendAppendEntries(UWB_Address_t peerAddress) {
     args->entryCount++;
   }
   args->leaderCommit = raftNode.commitIndex;
-  DEBUG_PRINT("raftSendAppendEntries: %u send append entries to %u.\n", raftNode.me, peerAddress);
+  DEBUG_PRINT("raftSendAppendEntries: %u send %d entries to %u, current log size = %u.\n",
+              raftNode.me,
+              args->entryCount,
+              peerAddress,
+              raftNode.log.size);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 // TODO: check
@@ -559,6 +565,9 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
   // TODO: check snapshot
   int startItemIndex = matchedItemIndex + 1;
   raftLogCleanFrom(&raftNode.log, startItemIndex);
+  DEBUG_PRINT("raftProcessAppendEntries: start index = %u, log size = %u.\n",
+              startItemIndex,
+              raftNode.log.size);
   /* Append any new entries not already in the log. */
   // TODO: check
   for (int i = 0; i < args->entryCount; i++) {
@@ -660,7 +669,7 @@ void raftSendCommand(Raft_Command_Args_t *args) {
   dataTxPacket.header.ttl = 10;
   dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Command_Args_t);
   memcpy(dataTxPacket.payload, args, sizeof (Raft_Command_Args_t));
-  DEBUG_PRINT("raftSendRequestVote: %u send command to leader %u, requestId = %u.\n",
+  DEBUG_PRINT("raftSendCommand: %u send command to leader %u, requestId = %u.\n",
               raftNode.me,
               raftNode.currentLeader,
               args->command.requestId);

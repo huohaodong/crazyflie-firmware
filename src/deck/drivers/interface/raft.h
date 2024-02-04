@@ -5,7 +5,7 @@
 #include "semphr.h"
 #include "routing.h"
 
-#define RAFT_DEBUG_ENABLE
+//#define RAFT_DEBUG_ENABLE
 
 /* Queue Constants */
 #define RAFT_RX_QUEUE_SIZE 5
@@ -104,7 +104,7 @@ typedef struct {
   bool voteGranted; /* true means candidate received vote */
 } __attribute__((packed)) Raft_Request_Vote_Reply_t;
 
-#define RAFT_LOG_ENTRIES_SIZE_MAX ((ROUTING_DATA_PACKET_PAYLOAD_SIZE_MAX - 8) / sizeof (Raft_Log_t))
+#define RAFT_LOG_ENTRIES_SIZE_MAX 3
 
 typedef struct {
   RAFT_MESSAGE_TYPE type;
