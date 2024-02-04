@@ -41,7 +41,7 @@ typedef struct {
   uint16_t requestId;
   // TODO payload
 //  uint8_t payload[RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX];
-} Raft_Log_Command_t;
+} __attribute__((packed)) Raft_Log_Command_t;
 
 typedef struct {
   RAFT_LOG_COMMAND_TYPE type;
@@ -78,7 +78,7 @@ typedef struct {
   uint16_t matchIndex[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX]; /* for each server, index of highest log entry known to be replicated on server (initialized to 0, increases monotonically) */
   Time_t lastHeartbeatTime; /* heartbeat used for trigger leader election */
   /* State for client */
-  uint16_t appliedRequestId[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX]; /* latest request id applied to the state machine for each client */
+  uint16_t latestAppliedRequestId[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX]; /* latest request id applied to the state machine for each client */
 } Raft_Node_t;
 
 typedef enum {
@@ -133,7 +133,9 @@ typedef struct {
 
 typedef struct {
   RAFT_MESSAGE_TYPE type;
-  uint16_t leaderApply;
+  uint16_t latestApplied; /* latest applied request id in the state machine */
+  UWB_Address_t leaderAddress; /* current leader address for the client to retry */
+  bool success;
 } __attribute__((packed)) Raft_Command_Reply_t;
 
 /* Raft Server Operations */
@@ -148,7 +150,7 @@ void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool s
 void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entries_Reply_t *reply);
 void raftSendCommand(Raft_Command_Args_t *args);
 void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args);
-void raftSendCommandReply(UWB_Address_t clientId, uint16_t leaderApply);
+void raftSendCommandReply(UWB_Address_t clientId, uint16_t latestApplied, UWB_Address_t leaderAddress, bool success);
 void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply);
 
 /* Raft Client Operations */

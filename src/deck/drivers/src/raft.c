@@ -22,7 +22,7 @@ static Raft_Node_t raftNode;
 static TimerHandle_t raftElectionTimer;
 static TimerHandle_t raftHeartbeatTimer;
 static TimerHandle_t raftLogApplyTimer;
-static uint16_t raftClientRequestId;
+static uint16_t raftClientRequestId = 1;
 static uint16_t raftLeaderApply;
 static Raft_Log_Item_t EMPTY_LOG_ITEM = {
     .term = 0,
@@ -89,7 +89,15 @@ static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
               raftLog->items[logItemIndex].command.requestId);
   uint16_t clientId = raftLog->items[logItemIndex].command.clientId;
   uint16_t requestId = raftLog->items[logItemIndex].command.requestId;
-  raftNode.appliedRequestId[clientId] = MAX(raftNode.appliedRequestId[clientId], requestId);
+  if (requestId <= raftNode.latestAppliedRequestId[clientId]) {
+    DEBUG_PRINT("raftLogApply: %u deduplicate log from %u with same requestId = %u to guarantee EXACTLY_ONCE.\n",
+                raftNode.me,
+                raftLog->items[logItemIndex].command.clientId,
+                raftLog->items[logItemIndex].command.requestId);
+    return;
+  }
+  raftNode.latestAppliedRequestId[clientId] = MAX(raftNode.latestAppliedRequestId[clientId], requestId);
+  // TODO: process command according to RAFT_LOG_COMMAND_TYPE
 }
 // TODO: check
 static void raftLogAppend(Raft_Log_t *raftLog, uint16_t logTerm, Raft_Log_Command_t command) {
@@ -283,9 +291,9 @@ static void raftCommandBufferConsumeTask() {
     if (xQueuePeek(commandBufferQueue, &item, portMAX_DELAY)) {
       if (item.readIndex <= raftNode.lastApplied) {
         xQueueReceive(commandBufferQueue, &item, M2T(0));
-        raftSendCommandReply(item.clientId, raftNode.lastApplied);
+        raftSendCommandReply(item.clientId, raftNode.latestAppliedRequestId[item.clientId], raftNode.currentLeader, true);
       } else {
-        vTaskDelay(M2T(RAFT_HEARTBEAT_INTERVAL + 10));
+        vTaskDelay(M2T(RAFT_HEARTBEAT_INTERVAL / 5));
       }
     }
     vTaskDelay(M2T(1));
@@ -319,6 +327,7 @@ void raftInit() {
   for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
     raftNode.nextIndex[i] = raftNode.log.items[raftNode.log.size - 1].index + 1;
     raftNode.matchIndex[i] = 0;
+    raftNode.latestAppliedRequestId[i] = 0;
   }
   raftNode.lastHeartbeatTime = xTaskGetTickCount();
   raftHeartbeatTimer = xTimerCreate("raftHeartbeatTimer",
@@ -657,18 +666,39 @@ void raftSendCommand(Raft_Command_Args_t *args) {
               args->command.requestId);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
-
+// TODO: check
 void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
-  // TODO
+  DEBUG_PRINT("raftProcessCommand: %u received command from client %u, requestId = %u.\n",
+              raftNode.me,
+              clientId,
+              args->command.requestId);
+  if (raftNode.currentLeader != raftNode.me) {
+    DEBUG_PRINT("raftProcessCommand: %u is not the leader, current leader is %u.\n",
+                raftNode.me,
+                raftNode.currentLeader);
+    raftSendCommandReply(clientId, raftNode.latestAppliedRequestId[clientId], raftNode.currentLeader, false);
+    return;
+  }
+  if (args->command.requestId <= raftNode.latestAppliedRequestId[clientId]) {
+    DEBUG_PRINT("raftProcessCommand: %u received duplicated command from client %u, requestId = %u.\n",
+                raftNode.me,
+                clientId,
+                args->command.requestId);
+    raftSendCommandReply(clientId, raftNode.latestAppliedRequestId[clientId], raftNode.me, true);
+    return;
+  }
+  /* Append new log entry and then buffer this command with readIndex = index of the new log entry. */
+  raftLogAppend(&raftNode.log, raftNode.currentTerm, args->command);
+  bufferRaftCommand(raftNode.log.items[raftNode.log.size - 1].index, &args->command);
 }
 
-void raftSendCommandReply(UWB_Address_t clientId, uint16_t leaderApply) {
+void raftSendCommandReply(UWB_Address_t clientId, uint16_t leaderApply, UWB_Address_t leaderAddress, bool success) {
   // TODO
 }
 
 void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply) {
   // TODO
-  raftLeaderApply = MAX(raftLeaderApply, reply->leaderApply);
+  raftLeaderApply = MAX(raftLeaderApply, reply->latestApplied);
 }
 
 uint16_t getNextRequestId() {
