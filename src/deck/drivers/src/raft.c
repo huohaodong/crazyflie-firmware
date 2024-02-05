@@ -167,6 +167,7 @@ static void convertToCandidate(Raft_Node_t *node) {
 static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
+  printRaftLog(&raftNode.log);
   if (raftNode.currentState == RAFT_STATE_LEADER) {
     // TODO: use actual node configuration
     for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
