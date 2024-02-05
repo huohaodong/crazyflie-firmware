@@ -800,3 +800,23 @@ bool raftProposeCheck(uint16_t requestId, int wait) {
   vTaskDelay(M2T(wait));
   return raftLeaderApply >= requestId;
 }
+
+void printRaftLog(Raft_Log_t *raftLog) {
+  DEBUG_PRINT("term\t index\t clientId\t reqId\t \n");
+  for (int i = 0; i < raftLog->size; i++) {
+    DEBUG_PRINT("%u\t %u\t %u\t %u\t \n",
+                raftLog->items[i].term,
+                raftLog->items[i].index,
+                raftLog->items[i].command.clientId,
+                raftLog->items[i].command.requestId);
+  }
+}
+
+void printRaftLogItem(Raft_Log_Item_t *item) {
+  DEBUG_PRINT("term\t index\t clientId\t reqId\t \n");
+  DEBUG_PRINT("%u\t %u\t %u\t %u\t \n",
+              item->term,
+              item->index,
+              item->command.clientId,
+              item->command.requestId);
+}

@@ -152,6 +152,8 @@ void raftSendCommand(Raft_Command_Args_t *args);
 void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args);
 void raftSendCommandReply(UWB_Address_t clientId, uint16_t latestApplied, UWB_Address_t leaderAddress, bool success);
 void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply);
+void printRaftLog(Raft_Log_t *raftLog);
+void printRaftLogItem(Raft_Log_Item_t *item);
 
 /* Raft Client Operations */
 uint16_t raftProposeNew(RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t size);
