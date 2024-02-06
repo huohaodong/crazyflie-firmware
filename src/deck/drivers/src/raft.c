@@ -29,6 +29,9 @@ static Raft_Log_Item_t EMPTY_LOG_ITEM = {
     .index = 0,
     .command = {.type = RAFT_LOG_COMMAND_RESERVED, .clientId = UWB_DEST_EMPTY, .requestId = 0} // TODO: init payload
 };
+static uint16_t getNextRequestId() {
+  return raftClientRequestId++;
+}
 // TODO: check
 static int raftLogFindByIndex(Raft_Log_t *raftLog, uint16_t logIndex) {
   for (int i = raftLog->size - 1; i >= 0; i--) {
@@ -100,36 +103,51 @@ static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
   // TODO: process command according to RAFT_LOG_COMMAND_TYPE
 }
 // TODO: check
-static void raftLogAppend(Raft_Log_t *raftLog, uint16_t logTerm, Raft_Log_Command_t command) {
+static void raftLogAppend(Raft_Log_t *raftLog, uint16_t logTerm, Raft_Log_Command_t *command) {
   if (raftLog->size >= RAFT_LOG_SIZE_MAX * 0.75) {
     // TODO: snapshot
   }
   int index = raftLog->size;
   raftLog->items[index].term = logTerm;
   raftLog->items[index].index = raftLog->items[index - 1].index + 1;
-  raftLog->items[index].command = command;
+  raftLog->items[index].command = *command;
   raftLog->size++;
   DEBUG_PRINT("raftLogAdd: Add log index = %u, term = %u.\n", raftLog->items[index].index, raftLog->items[index].term);
 }
 // TODO: check
 static void raftUpdateCommitIndex(Raft_Node_t *node) {
   // TODO: Compare count with actual node configuration
+  if (node->currentState != RAFT_STATE_LEADER) {
+    return;
+  }
   for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     uint16_t candidateCommitIndex = node->matchIndex[peer];
-    if (candidateCommitIndex > node->commitIndex) {
-      uint8_t count = 0;
-      for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
-        if (i != node->me && node->matchIndex[i] >= candidateCommitIndex) {
-          count++;
-        }
+    if (candidateCommitIndex <= node->commitIndex) {
+      continue;
+    }
+    int index = raftLogFindByIndex(&node->log, candidateCommitIndex);
+    if (index == -1) {
+      continue;
+    }
+    Raft_Log_Item_t logItem = node->log.items[index];
+    /* Leader can only commit logs generated in its term, logs generated in preceding terms are committed implicitly. */
+    if (logItem.term != raftNode.currentTerm) {
+      DEBUG_PRINT(
+          "raftUpdateCommitIndex: Leader can only commit logs generated in its term, logs generated in preceding terms are committed implicitly.\n");
+      continue;
+    }
+    uint8_t count = 0;
+    for (int i = 0; i < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
+      if (i != node->me && node->matchIndex[i] >= candidateCommitIndex) {
+        count++;
       }
-      if (count >= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX / 2) {
-        DEBUG_PRINT("raftUpdateCommitIndex: %u update commit index from %u to %u.\n",
-                    node->me,
-                    node->commitIndex,
-                    MAX(node->commitIndex, candidateCommitIndex));
-        node->commitIndex = MAX(node->commitIndex, candidateCommitIndex);
-      }
+    }
+    if (count >= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX / 2) {
+      DEBUG_PRINT("raftUpdateCommitIndex: %u update commit index from %u to %u.\n",
+                  node->me,
+                  node->commitIndex,
+                  MAX(node->commitIndex, candidateCommitIndex));
+      node->commitIndex = MAX(node->commitIndex, candidateCommitIndex);
     }
   }
 }
@@ -150,6 +168,14 @@ static void convertToLeader(Raft_Node_t *node) {
   for (int peer = 0; peer < RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     node->peerVote[peer] = false;
   }
+  /* Append an empty log entry (NO_OPS) for implicitly commit preceding logs. */
+  Raft_Log_Command_t noOpsLog = {
+      .type = RAFT_LOG_COMMAND_NO_OPS,
+      .requestId = getNextRequestId(),
+      .clientId = node->me,
+      // TODO: init empty payload
+  };
+  raftLogAppend(&node->log, node->currentTerm, &noOpsLog);
 }
 
 static void convertToCandidate(Raft_Node_t *node) {
@@ -718,7 +744,7 @@ void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
     return;
   }
   /* Append new log entry and then buffer this command with readIndex = index of the new log entry. */
-  raftLogAppend(&raftNode.log, raftNode.currentTerm, args->command);
+  raftLogAppend(&raftNode.log, raftNode.currentTerm, &args->command);
   bufferRaftCommand(raftNode.log.items[raftNode.log.size - 1].index, &args->command);
 }
 // TODO: check
@@ -762,9 +788,6 @@ void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *re
   }
 }
 
-uint16_t getNextRequestId() {
-  return raftClientRequestId++;
-}
 // TODO: check
 uint16_t raftProposeNew(RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t size) {
   uint16_t requestId = getNextRequestId();
@@ -803,21 +826,23 @@ bool raftProposeCheck(uint16_t requestId, int wait) {
 }
 
 void printRaftLog(Raft_Log_t *raftLog) {
-  DEBUG_PRINT("term\t index\t clientId\t reqId\t \n");
+  DEBUG_PRINT("term\t index\t clientId\t reqId\t type\t \n");
   for (int i = 0; i < raftLog->size; i++) {
-    DEBUG_PRINT("%u\t %u\t %u\t %u\t \n",
+    DEBUG_PRINT("%u\t %u\t %u\t %u\t %u\t \n",
                 raftLog->items[i].term,
                 raftLog->items[i].index,
                 raftLog->items[i].command.clientId,
-                raftLog->items[i].command.requestId);
+                raftLog->items[i].command.requestId,
+                raftLog->items[i].command.type);
   }
 }
 
 void printRaftLogItem(Raft_Log_Item_t *item) {
-  DEBUG_PRINT("term\t index\t clientId\t reqId\t \n");
-  DEBUG_PRINT("%u\t %u\t %u\t %u\t \n",
+  DEBUG_PRINT("term\t index\t clientId\t reqId\t type\t \n");
+  DEBUG_PRINT("%u\t %u\t %u\t %u\t %u\t \n",
               item->term,
               item->index,
               item->command.clientId,
-              item->command.requestId);
+              item->command.requestId,
+              item->command.type);
 }
