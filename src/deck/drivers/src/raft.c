@@ -189,6 +189,14 @@ static void convertToCandidate(Raft_Node_t *node) {
   node->lastHeartbeatTime = xTaskGetTickCount();
 }
 
+static void raftApplyLog() {
+  int startIndex = raftNode.lastApplied + 1;
+  for (int i = startIndex; i <= raftNode.commitIndex; i++) {
+    raftNode.lastApplied++;
+    raftLogApply(&raftNode.log, i);
+  }
+}
+
 // TODO: check
 static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
@@ -236,11 +244,7 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
 static void raftLogApplyTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftLogApplyTimerCallback: %u trigger log apply timer at %lu.\n", raftNode.me, xTaskGetTickCount());
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
-  int startIndex = raftNode.lastApplied + 1;
-  for (int i = startIndex; i <= raftNode.commitIndex; i++) {
-    raftNode.lastApplied++;
-    raftLogApply(&raftNode.log, i);
-  }
+  raftApplyLog();
   xSemaphoreGive(raftNode.mu);
 }
 
@@ -670,6 +674,7 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
      * and log[N].term == currentTerm: set commitIndex = N.
      */
     raftUpdateCommitIndex(&raftNode);
+    raftApplyLog();
   } else {
     /* If AppendEntries fails because of log inconsistency: decrement nextIndex and retry.
      * Here we decrement nextIndex from nextIndex to matchIndex in a term by term way for efficiency.
