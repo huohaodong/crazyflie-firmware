@@ -14,7 +14,7 @@
 #define RAFT_COMMAND_BUFFER_QUEUE_ITEM_SIZE sizeof(Raft_Log_Command_Buffer_Item_t)
 
 /* Raft Constants */
-#define RAFT_LOG_SIZE_MAX 100
+#define RAFT_LOG_SIZE_MAX 50
 #define RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX 31
 #define RAFT_VOTE_FOR_NO_ONE UWB_DEST_EMPTY
 #define RAFT_HEARTBEAT_INTERVAL 1000 // default 150ms
@@ -32,10 +32,10 @@ typedef enum {
 typedef enum {
   RAFT_LOG_COMMAND_RESERVED,
   RAFT_LOG_COMMAND_NO_OPS,
-  RAFT_LOG_COMMAND_CONFIG,
+  RAFT_LOG_COMMAND_CONFIG_ADD,
+  RAFT_LOG_COMMAND_CONFIG_REMOVE,
   RAFT_LOG_COMMAND_GET,
   RAFT_LOG_COMMAND_PUT
-  // TODO
 } RAFT_LOG_COMMAND_TYPE;
 
 typedef struct {
@@ -43,7 +43,7 @@ typedef struct {
   UWB_Address_t clientId;
   uint16_t requestId;
   // TODO payload
-//  uint8_t payload[RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX];
+  uint8_t payload[RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX];
 } __attribute__((packed)) Raft_Log_Command_t;
 
 typedef struct {

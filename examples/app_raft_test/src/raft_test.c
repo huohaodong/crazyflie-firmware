@@ -7,22 +7,44 @@
 
 static TaskHandle_t raftTaskHandle;
 
-static void raftTask() {
-  bool state = true;
+static void testProposeEmptyLog() {
+  bool success = true;
   uint16_t requestId = 0;
   while (1) {
-    if (state) {
+    if (success) {
       requestId = raftProposeNew(RAFT_LOG_COMMAND_RESERVED, NULL, 0);
-      state = false;
+      success = false;
     } else {
       raftProposeRetry(requestId, RAFT_LOG_COMMAND_RESERVED, NULL, 0);
     }
-    state = raftProposeCheck(requestId, 2000);
-    DEBUG_PRINT("raftTask: proposed requestId = %u, state = %d.\n",
+    success = raftProposeCheck(requestId, 2000);
+    DEBUG_PRINT("raftTask: proposed requestId = %u, success = %d.\n",
                 requestId,
-                state
+                success
     );
   }
+}
+
+static void testProposeMemeberRemove() {
+  bool success = true;
+  uint16_t requestId = 0;
+  while (1) {
+    if (success) {
+      requestId = raftProposeNew(RAFT_LOG_COMMAND_RESERVED, NULL, 0);
+      success = false;
+    } else {
+      raftProposeRetry(requestId, RAFT_LOG_COMMAND_RESERVED, NULL, 0);
+    }
+    success = raftProposeCheck(requestId, 2000);
+    DEBUG_PRINT("raftTask: proposed requestId = %u, success = %d.\n",
+                requestId,
+                success
+    );
+  }
+}
+
+static void raftTask() {
+  testProposeEmptyLog();
 }
 
 void appMain() {

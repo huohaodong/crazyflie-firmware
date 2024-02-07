@@ -24,6 +24,7 @@ static TimerHandle_t raftElectionTimer;
 static TimerHandle_t raftHeartbeatTimer;
 static TimerHandle_t raftLogApplyTimer;
 static uint16_t raftClientRequestId = 1;
+static SemaphoreHandle_t raftRequestIdMutex;
 static uint16_t raftLeaderApply;
 static uint32_t raftMembers;
 static uint8_t raftClusterId;
@@ -93,7 +94,10 @@ static void printRaftConfig(Raft_Config_t config) {
 }
 
 static uint16_t getNextRequestId() {
-  return raftClientRequestId++;
+  xSemaphoreTake(raftRequestIdMutex, M2T(0));
+  uint16_t nextId = raftClientRequestId++;
+  xSemaphoreGive(raftRequestIdMutex);
+  return nextId;
 }
 
 static int raftLogFindByIndex(Raft_Log_t *raftLog, uint16_t logIndex) {
@@ -162,7 +166,20 @@ static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
     return;
   }
   raftNode.latestAppliedRequestId[clientId] = MAX(raftNode.latestAppliedRequestId[clientId], requestId);
-  // TODO: process command according to RAFT_LOG_COMMAND_TYPE
+  // TODO: handlers
+  Raft_Log_Command_t *command = &raftLog->items[logItemIndex].command;
+  switch (command->type) {
+    case RAFT_LOG_COMMAND_NO_OPS:break;
+    case RAFT_LOG_COMMAND_CONFIG_ADD:raftConfigAdd(*(uint16_t *) command->payload);
+      break;
+    case RAFT_LOG_COMMAND_CONFIG_REMOVE:raftConfigRemove(*(uint16_t *) command->payload);
+      break;
+    case RAFT_LOG_COMMAND_GET:break;
+    case RAFT_LOG_COMMAND_PUT:break;
+    default:DEBUG_PRINT("raftLogApply: %u try to apply an unknown type = %u, do nothing.\n",
+                        raftNode.me,
+                        command->type);
+  }
 }
 
 static void raftLogAppend(Raft_Log_t *raftLog, uint16_t logTerm, Raft_Log_Command_t *command) {
@@ -397,9 +414,9 @@ static void raftCommandBufferConsumeTask() {
 }
 
 void raftInit() {
-  xSemaphoreCreateMutex();
   rxQueue = xQueueCreate(RAFT_RX_QUEUE_SIZE, RAFT_RX_QUEUE_ITEM_SIZE);
   commandBufferQueue = xQueueCreate(RAFT_COMMAND_BUFFER_QUEUE_SIZE, RAFT_COMMAND_BUFFER_QUEUE_ITEM_SIZE);
+  raftRequestIdMutex = xSemaphoreCreateMutex();
   UWB_Data_Packet_Listener_t listener = {
       .type = UWB_DATA_MESSAGE_RAFT,
       .rxQueue = rxQueue
@@ -808,10 +825,15 @@ void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
     raftSendCommandReply(clientId, raftNode.latestAppliedRequestId[clientId], raftNode.me, true);
     return;
   }
-  // TODO: command check leader ship change
   /* Append new log entry and then buffer this command with readIndex = index of the new log entry. */
   raftLogAppend(&raftNode.log, raftNode.currentTerm, &args->command);
   bufferRaftCommand(raftNode.log.items[raftNode.log.size - 1].index, &args->command);
+  // TODO: check
+  if ((args->command.type == RAFT_LOG_COMMAND_CONFIG_ADD && raftConfigAdd(*(uint16_t *) args->command.payload)) ||
+      (args->command.type == RAFT_LOG_COMMAND_CONFIG_REMOVE && raftConfigRemove(*(uint16_t *) args->command.payload))) {
+    /* Here we append a no ops log entry and make current term + 1 to implicitly commit COMMAND_CONFIG */
+    convertToLeader(&raftNode);
+  }
 }
 
 void raftSendCommandReply(UWB_Address_t clientId, uint16_t latestApplied, UWB_Address_t leaderAddress, bool success) {
@@ -856,16 +878,18 @@ void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *re
 
 uint16_t raftProposeNew(RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t size) {
   uint16_t requestId = getNextRequestId();
-  Raft_Command_Args_t args = {
-      .type = RAFT_COMMAND_REQUEST,
-      .command = {
-          .type = type,
-          .clientId = raftNode.me,
-          .requestId = requestId
-      },
-      // TODO: init payload
-  };
-  raftSendCommand(&args);
+  if (raftNode.currentLeader != UWB_DEST_EMPTY) {
+    Raft_Command_Args_t args = {
+        .type = RAFT_COMMAND_REQUEST,
+        .command = {
+            .type = type,
+            .clientId = raftNode.me,
+            .requestId = requestId
+        },
+        // TODO: init payload
+    };
+    raftSendCommand(&args);
+  }
   return requestId;
 }
 
