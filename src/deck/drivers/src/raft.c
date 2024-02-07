@@ -34,13 +34,14 @@ static Raft_Log_Item_t EMPTY_LOG_ITEM = {
 };
 
 static bool raftConfigAdd(UWB_Address_t node) {
-  if (raftNode.currentState != RAFT_STATE_LEADER) {
-    DEBUG_PRINT("raftConfigAdd: %u is not the leader, don't add node %u to cluster %u.\n",
-                raftNode.me,
-                node,
-                raftNode.config.clusterId);
-    return false;
-  }
+  // TODO: check
+//  if (raftNode.currentState != RAFT_STATE_LEADER) {
+//    DEBUG_PRINT("raftConfigAdd: %u is not the leader, don't add node %u to cluster %u.\n",
+//                raftNode.me,
+//                node,
+//                raftNode.config.clusterId);
+//    return false;
+//  }
   raftNode.config.previousConfig = raftNode.config.currentConfig;
   raftNode.config.currentConfig = raftNode.config.currentConfig | (1 << node);
   if (raftNode.config.previousConfig == raftNode.config.currentConfig) {
@@ -83,7 +84,7 @@ static bool raftConfigHasPeer(UWB_Address_t peer) {
 
 static void printRaftConfig(Raft_Config_t config) {
   DEBUG_PRINT("cluster id = %u, size = %u, Members = ", config.clusterId, config.clusterSize);
-  for (int i = 0; i <= 31; i++) {
+  for (int i = 0; i <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
     if (config.currentConfig & (1 << i)) {
       DEBUG_PRINT("%d ", i);
     }
@@ -425,7 +426,12 @@ void raftInit() {
   }
   raftNode.lastHeartbeatTime = xTaskGetTickCount();
   raftNode.config.clusterId = raftClusterId;
+  for (int i = 0; i < 5; i++) {
+    raftConfigAdd(i);
+  }
   DEBUG_PRINT("raftInit: node id = %u, cluster id = %u.\n", raftNode.me, raftClusterId);
+  printRaftConfig(raftNode.config);
+
   raftHeartbeatTimer = xTimerCreate("raftHeartbeatTimer",
                                    M2T(RAFT_HEARTBEAT_INTERVAL),
                                    pdTRUE,
