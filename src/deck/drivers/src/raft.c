@@ -51,6 +51,9 @@ static bool raftConfigAdd(UWB_Address_t node) {
     return false;
   }
   raftNode.config.clusterSize++;
+  raftNode.peerVote[node] = false;
+  raftNode.nextIndex[node] = raftNode.log.items[raftNode.log.size - 1].index + 1;
+  raftNode.matchIndex[node] = 0;
   DEBUG_PRINT("raftConfigAdd: %u add node %u to cluster %u.\n", raftNode.me, node, raftNode.config.clusterId);
   return true;
 }
@@ -66,6 +69,9 @@ static bool raftConfigRemove(UWB_Address_t node) {
     return false;
   }
   raftNode.config.clusterSize--;
+  raftNode.peerVote[node] = false;
+  raftNode.nextIndex[node] = raftNode.log.items[raftNode.log.size - 1].index + 1;
+  raftNode.matchIndex[node] = 0;
   DEBUG_PRINT("raftConfigRemove: %u remove node %u in cluster %u.\n", raftNode.me, node, raftNode.config.clusterId);
   return true;
 }
@@ -152,12 +158,12 @@ static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
   switch (command->type) {
     case RAFT_LOG_COMMAND_NO_OPS:break;
     case RAFT_LOG_COMMAND_CONFIG_ADD:
-      DEBUG_PRINT("raftLogApply: RAFT_LOG_COMMAND_CONFIG_ADD %u.\n", *(uint16_t *) command->payload);
-      raftConfigAdd(*(uint16_t *) command->payload);
+      DEBUG_PRINT("raftLogApply: RAFT_LOG_COMMAND_CONFIG_ADD %u.\n", *(uint16_t *) &command->payload);
+      raftConfigAdd(*(uint16_t *) &command->payload);
       break;
     case RAFT_LOG_COMMAND_CONFIG_REMOVE:
-      DEBUG_PRINT("raftLogApply: RAFT_LOG_COMMAND_CONFIG_REMOVE %u.\n", *(uint16_t *) command->payload);
-      raftConfigRemove(*(uint16_t *) command->payload);
+      DEBUG_PRINT("raftLogApply: RAFT_LOG_COMMAND_CONFIG_REMOVE %u.\n", *(uint16_t *) &command->payload);
+      raftConfigRemove(*(uint16_t *) &command->payload);
       if (!raftConfigHasPeer(raftNode.me)) {
         raftLogCleanFrom(raftLog, 1);
         raftNode.currentLeader = UWB_DEST_EMPTY;
@@ -191,6 +197,11 @@ static void raftLogAppend(Raft_Log_t *raftLog, uint16_t logTerm, Raft_Log_Comman
   raftLog->items[index].command = *command;
   raftLog->size++;
   DEBUG_PRINT("raftLogAdd: Add log index = %u, term = %u.\n", raftLog->items[index].index, raftLog->items[index].term);
+  if ((raftLog->items[index].command.type == RAFT_LOG_COMMAND_CONFIG_ADD
+      || raftLog->items[index].command.type == RAFT_LOG_COMMAND_CONFIG_REMOVE)
+      && *(uint16_t *) &raftLog->items[index].command.payload == raftNode.me) {
+    raftLogApply(raftLog, index);
+  }
 }
 // TODO: check
 static void raftUpdateCommitIndex(Raft_Node_t *node) {
@@ -251,7 +262,7 @@ static void convertToLeader(Raft_Node_t *node) {
   /* Append an empty log entry (NO_OPS) for implicitly commit preceding logs. */
   Raft_Log_Command_t noOpsLog = {
       .type = RAFT_LOG_COMMAND_NO_OPS,
-      .requestId = getNextRequestId(),
+      .requestId = 0,
       .clientId = node->me,
       // TODO: init empty payload
   };
@@ -267,15 +278,6 @@ static void convertToCandidate(Raft_Node_t *node) {
   }
   node->voteFor = raftNode.me;
   node->lastHeartbeatTime = xTaskGetTickCount();
-}
-
-static bool raftCommitCheckForConfig() {
-  for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
-    if (peer != raftNode.me && raftNode.config.previousConfig) {
-      // TODO: if all matched return true
-    }
-  }
-  return false;
 }
 
 static void raftApplyLog() {
@@ -870,27 +872,24 @@ void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
     raftSendCommandReply(clientId, raftNode.latestAppliedRequestId[clientId], raftNode.me, true);
     return;
   }
-  /* Append new log entry and then buffer this command with readIndex = index of the new log entry. */
-  raftLogAppend(&raftNode.log, raftNode.currentTerm, &args->command);
-  bufferRaftCommand(raftNode.log.items[raftNode.log.size - 1].index, &args->command);
   if ((args->command.type == RAFT_LOG_COMMAND_CONFIG_ADD && raftConfigAdd(*(uint16_t *) &args->command.payload)) ||
       (args->command.type == RAFT_LOG_COMMAND_CONFIG_REMOVE && raftConfigRemove(*(uint16_t *) &args->command.payload))) {
     /* Now use the combination of C_OLD and C_NEW to perform one-step membership change, when the change log is committed,
      * the log applier will preform the final member change operations (raftConfigAdd or raftConfigRemove).
      */
     raftNode.config.currentConfig = raftNode.config.currentConfig | raftNode.config.previousConfig;
-    /* Here we append a no ops log entry and make leader's current term + 1 to implicitly commit COMMAND_CONFIG since
-     * leader can only commit the log entry with term == leader.currentTerm.
-     */
+    /* Here we append a no ops log entry to ensure success leader */
     Raft_Log_Command_t noOpsLog = {
         .type = RAFT_LOG_COMMAND_NO_OPS,
-        .requestId = getNextRequestId(),
+        .requestId = 0,
         .clientId = raftNode.me,
         // TODO: init empty payload
     };
-    raftNode.currentTerm++;
     raftLogAppend(&raftNode.log, raftNode.currentTerm, &noOpsLog);
   }
+  /* Append new log entry and then buffer this command with readIndex = index of the new log entry. */
+  raftLogAppend(&raftNode.log, raftNode.currentTerm, &args->command);
+  bufferRaftCommand(raftNode.log.items[raftNode.log.size - 1].index, &args->command);
 }
 
 void raftSendCommandReply(UWB_Address_t clientId, uint16_t latestApplied, UWB_Address_t leaderAddress, bool success) {

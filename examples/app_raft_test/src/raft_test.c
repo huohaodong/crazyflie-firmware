@@ -23,6 +23,9 @@ static void testProposeEmptyLog() {
                 requestId,
                 success
     );
+    if (success) {
+      break;
+    }
   }
 }
 
@@ -37,11 +40,14 @@ static void testProposeMemeberAdd(UWB_Address_t newMember) {
       raftProposeRetry(requestId, RAFT_LOG_COMMAND_CONFIG_ADD, (uint8_t * ) & newMember, 2);
     }
     success = raftProposeCheck(requestId, 2000);
-    DEBUG_PRINT("raftTask: proposed requestId = %u, success = %d.\n",
+    DEBUG_PRINT("testProposeMemeberAdd: proposed requestId = %u, success = %d.\n",
                 requestId,
                 success
     );
     printRaftConfig(raftNode->config);
+    if (success) {
+      break;
+    }
   }
 }
 
@@ -56,22 +62,29 @@ static void testProposeMemeberRemove(UWB_Address_t newMember) {
       raftProposeRetry(requestId, RAFT_LOG_COMMAND_CONFIG_REMOVE, (uint8_t * ) & newMember, 2);
     }
     success = raftProposeCheck(requestId, 2000);
-    DEBUG_PRINT("raftTask: proposed requestId = %u, success = %d.\n",
+    DEBUG_PRINT("testProposeMemeberRemove: proposed requestId = %u, success = %d.\n",
                 requestId,
                 success
     );
     printRaftConfig(raftNode->config);
+    if (success) {
+      break;
+    }
   }
 }
 
-static void raftTask() {
-  // testProposeEmptyLog();
-  // testProposeMemeberAdd(4);
+static void raftTestTask() {
+  testProposeEmptyLog();
   testProposeMemeberRemove(4);
+  testProposeMemeberAdd(4);
+  while (1) {
+    DEBUG_PRINT("raftTestTask: Done!\n");
+    vTaskDelay(M2T(3000));
+  }
 }
 
 void appMain() {
   raftNode = getGlobalRaftNode();
-  xTaskCreate(raftTask, "RAFT_TEST", UWB_TASK_STACK_SIZE, NULL,
+  xTaskCreate(raftTestTask, "RAFT_TEST", UWB_TASK_STACK_SIZE, NULL,
               ADHOC_DECK_TASK_PRI, &raftTaskHandle);
 }
