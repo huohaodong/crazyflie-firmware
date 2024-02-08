@@ -59,7 +59,7 @@ static bool raftConfigRemove(UWB_Address_t node) {
   raftNode.config.previousConfig = raftNode.config.currentConfig;
   raftNode.config.currentConfig = raftNode.config.currentConfig & (~(1 << node));
   if (raftNode.config.previousConfig == raftNode.config.currentConfig) {
-    DEBUG_PRINT("raftConfigRemove: %u try to remove an existing node %u in cluster %u, ignore.\n",
+    DEBUG_PRINT("raftConfigRemove: %u try to remove an unknown node %u in cluster %u, ignore.\n",
                 raftNode.me,
                 node,
                 raftNode.config.clusterId);
@@ -267,6 +267,15 @@ static void convertToCandidate(Raft_Node_t *node) {
   }
   node->voteFor = raftNode.me;
   node->lastHeartbeatTime = xTaskGetTickCount();
+}
+
+static bool raftCommitCheckForConfig() {
+  for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+    if (peer != raftNode.me && raftNode.config.previousConfig) {
+      // TODO: if all matched return true
+    }
+  }
+  return false;
 }
 
 static void raftApplyLog() {
@@ -654,7 +663,7 @@ void raftSendAppendEntries(UWB_Address_t peerAddress) {
 
 void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Args_t *args) {
   DEBUG_PRINT("raftProcessAppendEntries: %u received append entries request from %u.\n", raftNode.me, peerAddress);
-  if (raftNode.config.clusterId == RAFT_CLUSTER_ID_EMPTY) {
+  if (raftNode.config.clusterId == RAFT_CLUSTER_ID_EMPTY && (args->leaderConfig.currentConfig & (1 << raftNode.me))) {
     /* 1. This works for one-step member changes, since new or removed node doesn't have a valid cluster id, only the
      * cluster leader that received RAFT_LOG_COMMAND_CONFIG_ADD may send append entries requests to current node.
      * 2. If the leader changes, this still works since other cluster members still using the previous configuration, so
@@ -667,7 +676,7 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
     raftNode.config = args->leaderConfig;
     DEBUG_PRINT("raftProcessAppendEntries: %u try to join the cluster %u.\n", raftNode.me, raftNode.config.clusterId);
   }
-  if (!raftConfigHasPeer(peerAddress)) {
+  if (args->leaderConfig.clusterId != raftNode.config.clusterId || !raftConfigHasPeer(peerAddress)) {
     DEBUG_PRINT("raftProcessAppendEntries: Peer %u not in current config, ignore.\n", peerAddress);
     return;
   }
@@ -864,7 +873,6 @@ void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
   /* Append new log entry and then buffer this command with readIndex = index of the new log entry. */
   raftLogAppend(&raftNode.log, raftNode.currentTerm, &args->command);
   bufferRaftCommand(raftNode.log.items[raftNode.log.size - 1].index, &args->command);
-  // TODO: check
   if ((args->command.type == RAFT_LOG_COMMAND_CONFIG_ADD && raftConfigAdd(*(uint16_t *) &args->command.payload)) ||
       (args->command.type == RAFT_LOG_COMMAND_CONFIG_REMOVE && raftConfigRemove(*(uint16_t *) &args->command.payload))) {
     /* Now use the combination of C_OLD and C_NEW to perform one-step membership change, when the change log is committed,
