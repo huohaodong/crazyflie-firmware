@@ -152,9 +152,11 @@ static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
   switch (command->type) {
     case RAFT_LOG_COMMAND_NO_OPS:break;
     case RAFT_LOG_COMMAND_CONFIG_ADD:
+      DEBUG_PRINT("raftLogApply: RAFT_LOG_COMMAND_CONFIG_ADD %u.\n", *(uint16_t *) command->payload);
       raftConfigAdd(*(uint16_t *) command->payload);
       break;
     case RAFT_LOG_COMMAND_CONFIG_REMOVE:
+      DEBUG_PRINT("raftLogApply: RAFT_LOG_COMMAND_CONFIG_REMOVE %u.\n", *(uint16_t *) command->payload);
       raftConfigRemove(*(uint16_t *) command->payload);
       if (!raftConfigHasPeer(raftNode.me)) {
         raftLogCleanFrom(raftLog, 1);
@@ -863,8 +865,8 @@ void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
   raftLogAppend(&raftNode.log, raftNode.currentTerm, &args->command);
   bufferRaftCommand(raftNode.log.items[raftNode.log.size - 1].index, &args->command);
   // TODO: check
-  if ((args->command.type == RAFT_LOG_COMMAND_CONFIG_ADD && raftConfigAdd(*(uint16_t *) args->command.payload)) ||
-      (args->command.type == RAFT_LOG_COMMAND_CONFIG_REMOVE && raftConfigRemove(*(uint16_t *) args->command.payload))) {
+  if ((args->command.type == RAFT_LOG_COMMAND_CONFIG_ADD && raftConfigAdd(*(uint16_t *) &args->command.payload)) ||
+      (args->command.type == RAFT_LOG_COMMAND_CONFIG_REMOVE && raftConfigRemove(*(uint16_t *) &args->command.payload))) {
     /* Now use the combination of C_OLD and C_NEW to perform one-step membership change, when the change log is committed,
      * the log applier will preform the final member change operations (raftConfigAdd or raftConfigRemove).
      */
@@ -941,16 +943,18 @@ uint16_t raftProposeNew(RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t s
 }
 
 void raftProposeRetry(uint16_t requestId, RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t size) {
-  Raft_Command_Args_t args = {
-      .type = RAFT_COMMAND_REQUEST,
-      .command = {
-          .type = type,
-          .clientId = raftNode.me,
-          .requestId = requestId
-      },
-      // TODO: init payload
-  };
-  raftSendCommand(&args);
+  if (raftNode.currentLeader != UWB_DEST_EMPTY) {
+    Raft_Command_Args_t args = {
+        .type = RAFT_COMMAND_REQUEST,
+        .command = {
+            .type = type,
+            .clientId = raftNode.me,
+            .requestId = requestId,
+        },
+    };
+    memcpy(args.command.payload, payload, size);
+    raftSendCommand(&args);
+  }
 }
 
 bool raftProposeCheck(uint16_t requestId, int wait) {
