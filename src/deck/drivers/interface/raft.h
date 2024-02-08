@@ -20,8 +20,9 @@
 #define RAFT_HEARTBEAT_INTERVAL 1000 // default 150ms
 #define RAFT_ELECTION_TIMEOUT (5 * RAFT_HEARTBEAT_INTERVAL)
 #define RAFT_LOG_APPLY_INTERVAL 50 // default 50ms
-#define RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX 10 // TODO: fine tuning
-#define RAFT_LOG_ENTRIES_SIZE_MAX ((ROUTING_DATA_PACKET_PAYLOAD_SIZE_MAX - 16) / sizeof(Raft_Log_Item_t))
+#define RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX 15 // TODO: fine tuning
+#define RAFT_LOG_ENTRIES_SIZE_MAX ((ROUTING_DATA_PACKET_PAYLOAD_SIZE_MAX - 28) / sizeof(Raft_Log_Item_t))
+#define RAFT_CLUSTER_ID_EMPTY 255
 
 typedef enum {
   RAFT_STATE_FOLLOWER,
@@ -70,13 +71,12 @@ typedef struct {
   uint8_t clusterId;
   uint8_t clusterSize;
 //  uint8_t prevClusterId;
-} Raft_Config_t;
+} __attribute__((packed)) Raft_Config_t;
 
 typedef struct {
   SemaphoreHandle_t mu;
   UWB_Address_t currentLeader;
   UWB_Address_t me;
-  UWB_Address_t peerNodes[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX + 1]; /* peer nodes in current raft cluster configuration */
   bool peerVote[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX + 1]; /* granted vote count from peer nodes in current term */
   // TODO: heartbeat flag for read index
   RAFT_STATE currentState;
@@ -88,7 +88,7 @@ typedef struct {
   uint16_t nextIndex[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX + 1]; /* for each server, index of the next log entry to send to that server (initialized to leader last log index + 1) */
   uint16_t matchIndex[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX + 1]; /* for each server, index of highest log entry known to be replicated on server (initialized to 0, increases monotonically) */
   Time_t lastHeartbeatTime; /* heartbeat used for trigger leader election */
-  Raft_Config_t config;
+  Raft_Config_t config; /* peer nodes in current raft cluster configuration */
   /* State for client */
   uint16_t latestAppliedRequestId[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX + 1]; /* latest request id applied to the state machine for each client */
 } Raft_Node_t;
@@ -124,6 +124,7 @@ typedef struct {
   uint16_t prevLogTerm; /* term of prevLogIndex entry */
   uint16_t entryCount; /* log entries count */
   uint16_t leaderCommit; /* leader's commitIndex */
+  Raft_Config_t leaderConfig; /* leader's config for newly added nodes to update itself */
   Raft_Log_Item_t entries[RAFT_LOG_ENTRIES_SIZE_MAX]; /* log entries to store (empty for heartbeat; may send more than one for efficiency) */
 } __attribute__((packed)) Raft_Append_Entries_Args_t;
 
@@ -150,6 +151,7 @@ typedef struct {
 
 /* Raft Server Operations */
 void raftInit();
+Raft_Node_t *getGlobalRaftNode();
 void raftSendRequestVote(UWB_Address_t peerAddress);
 void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t *args);
 void raftSendRequestVoteReply(UWB_Address_t peerAddress, uint16_t term, bool voteGranted);
@@ -162,6 +164,7 @@ void raftSendCommand(Raft_Command_Args_t *args);
 void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args);
 void raftSendCommandReply(UWB_Address_t clientId, uint16_t latestApplied, UWB_Address_t leaderAddress, bool success);
 void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply);
+void printRaftConfig(Raft_Config_t config);
 void printRaftLog(Raft_Log_t *raftLog);
 void printRaftLogItem(Raft_Log_Item_t *item);
 

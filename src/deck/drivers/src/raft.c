@@ -33,16 +33,14 @@ static Raft_Log_Item_t EMPTY_LOG_ITEM = {
     .index = 0,
     .command = {.type = RAFT_LOG_COMMAND_RESERVED, .clientId = UWB_DEST_EMPTY, .requestId = 0} // TODO: init payload
 };
+static Raft_Config_t EMPTY_CONFIG = {
+    .currentConfig = 0,
+    .previousConfig = 0,
+    .clusterId = RAFT_CLUSTER_ID_EMPTY,
+    .clusterSize = 0
+};
 
 static bool raftConfigAdd(UWB_Address_t node) {
-  // TODO: check
-//  if (raftNode.currentState != RAFT_STATE_LEADER) {
-//    DEBUG_PRINT("raftConfigAdd: %u is not the leader, don't add node %u to cluster %u.\n",
-//                raftNode.me,
-//                node,
-//                raftNode.config.clusterId);
-//    return false;
-//  }
   raftNode.config.previousConfig = raftNode.config.currentConfig;
   raftNode.config.currentConfig = raftNode.config.currentConfig | (1 << node);
   if (raftNode.config.previousConfig == raftNode.config.currentConfig) {
@@ -58,13 +56,6 @@ static bool raftConfigAdd(UWB_Address_t node) {
 }
 
 static bool raftConfigRemove(UWB_Address_t node) {
-  if (raftNode.currentState != RAFT_STATE_LEADER) {
-    DEBUG_PRINT("raftConfigRemove: %u is not the leader, don't remove node %u in cluster %u.\n",
-                raftNode.me,
-                node,
-                raftNode.config.clusterId);
-    return false;
-  }
   raftNode.config.previousConfig = raftNode.config.currentConfig;
   raftNode.config.currentConfig = raftNode.config.currentConfig & (~(1 << node));
   if (raftNode.config.previousConfig == raftNode.config.currentConfig) {
@@ -81,16 +72,6 @@ static bool raftConfigRemove(UWB_Address_t node) {
 
 static bool raftConfigHasPeer(UWB_Address_t peer) {
   return (raftNode.config.currentConfig & (1 << peer));
-}
-
-static void printRaftConfig(Raft_Config_t config) {
-  DEBUG_PRINT("cluster id = %u, size = %u, Members = ", config.clusterId, config.clusterSize);
-  for (int i = 0; i <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
-    if (config.currentConfig & (1 << i)) {
-      DEBUG_PRINT("%d ", i);
-    }
-  }
-  DEBUG_PRINT("\n");
 }
 
 static uint16_t getNextRequestId() {
@@ -170,9 +151,25 @@ static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
   Raft_Log_Command_t *command = &raftLog->items[logItemIndex].command;
   switch (command->type) {
     case RAFT_LOG_COMMAND_NO_OPS:break;
-    case RAFT_LOG_COMMAND_CONFIG_ADD:raftConfigAdd(*(uint16_t *) command->payload);
+    case RAFT_LOG_COMMAND_CONFIG_ADD:
+      raftConfigAdd(*(uint16_t *) command->payload);
       break;
-    case RAFT_LOG_COMMAND_CONFIG_REMOVE:raftConfigRemove(*(uint16_t *) command->payload);
+    case RAFT_LOG_COMMAND_CONFIG_REMOVE:
+      raftConfigRemove(*(uint16_t *) command->payload);
+      if (!raftConfigHasPeer(raftNode.me)) {
+        raftLogCleanFrom(raftLog, 1);
+        raftNode.currentLeader = UWB_DEST_EMPTY;
+        raftNode.currentState = RAFT_STATE_FOLLOWER;
+        raftNode.currentTerm = 0;
+        raftNode.lastApplied = 0;
+        raftNode.commitIndex = 0;
+        for (int i = 0; i <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
+          raftNode.peerVote[i] = false;
+          raftNode.nextIndex[i] = raftNode.log.items[raftNode.log.size - 1].index + 1;
+          raftNode.matchIndex[i] = 0;
+        }
+        raftNode.config = EMPTY_CONFIG;
+      }
       break;
     case RAFT_LOG_COMMAND_GET:break;
     case RAFT_LOG_COMMAND_PUT:break;
@@ -281,6 +278,7 @@ static void raftApplyLog() {
 static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
+  printRaftConfig(raftNode.config);
   printRaftLog(&raftNode.log);
   if (raftNode.currentState == RAFT_STATE_LEADER) {
     for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
@@ -442,8 +440,9 @@ void raftInit() {
     raftNode.latestAppliedRequestId[i] = 0;
   }
   raftNode.lastHeartbeatTime = xTaskGetTickCount();
+  raftNode.config = EMPTY_CONFIG;
   raftNode.config.clusterId = raftClusterId;
-  for (int i = 0; i < 5; i++) {
+  for (int i = 0; i <= 4; i++) {
     raftConfigAdd(i);
   }
   DEBUG_PRINT("raftInit: node id = %u, cluster id = %u.\n", raftNode.me, raftClusterId);
@@ -474,6 +473,10 @@ void raftInit() {
               ADHOC_DECK_TASK_PRI, &raftCommandTaskHandle);
 }
 
+Raft_Node_t *getGlobalRaftNode() {
+  return &raftNode;
+}
+
 // TODO: leader broadcasting, follower uni-casting
 void raftSendRequestVote(UWB_Address_t peerAddress) {
   UWB_Data_Packet_t dataTxPacket;
@@ -494,6 +497,10 @@ void raftSendRequestVote(UWB_Address_t peerAddress) {
 
 void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t *args) {
   DEBUG_PRINT("raftProcessRequestVote: %u received vote request from %u.\n", raftNode.me, peerAddress);
+  if (!raftConfigHasPeer(peerAddress)) {
+    DEBUG_PRINT("raftProcessRequestVote: Peer %u not in current config, ignore.\n", peerAddress);
+    return;
+  }
   if (args->term < raftNode.currentTerm) {
     DEBUG_PRINT("raftProcessRequestVote: Candidate term = %u < my term = %u, ignore.\n",
                 args->term,
@@ -557,6 +564,10 @@ void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Re
               raftNode.me,
               peerAddress,
               reply->voteGranted);
+  if (!raftConfigHasPeer(peerAddress)) {
+    DEBUG_PRINT("raftProcessRequestVoteReply: Peer %u not in current config, ignore.\n", peerAddress);
+    return;
+  }
   if (reply->term < raftNode.currentTerm) {
     DEBUG_PRINT("raftProcessRequestVoteReply: Peer term = %u < my term = %u, ignore.\n",
                 reply->term,
@@ -617,6 +628,7 @@ void raftSendAppendEntries(UWB_Address_t peerAddress) {
   }
   args->prevLogIndex = raftNode.log.items[preLogItemIndex].index;
   args->prevLogTerm = raftNode.log.items[preLogItemIndex].term;
+  args->leaderConfig = raftNode.config;
   int startItemIndex = preLogItemIndex + 1;
   int endItemIndex = MIN(preLogItemIndex + RAFT_LOG_ENTRIES_SIZE_MAX, raftNode.log.size - 1);
   DEBUG_PRINT("raftSendAppendEntries: startItemIndex = %u, endItemIndex = %u, matchIndex = %u.\n",
@@ -640,6 +652,23 @@ void raftSendAppendEntries(UWB_Address_t peerAddress) {
 
 void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Args_t *args) {
   DEBUG_PRINT("raftProcessAppendEntries: %u received append entries request from %u.\n", raftNode.me, peerAddress);
+  if (raftNode.config.clusterId == RAFT_CLUSTER_ID_EMPTY) {
+    /* 1. This works for one-step member changes, since new or removed node doesn't have a valid cluster id, only the
+     * cluster leader that received RAFT_LOG_COMMAND_CONFIG_ADD may send append entries requests to current node.
+     * 2. If the leader changes, this still works since other cluster members still using the previous configuration, so
+     * current node doesn't affect the correctness: before the member change command been applied, only the leader can
+     * send append entries to current node, new leaders within the same cluster will take over.
+     * 3. To guarantee the log consistency, newly added node just act as a listener before actually join the cluster.
+     * 4. If the leader changes, this still works since other cluster members still using the previous configuration, so
+     * current node doesn't affect the correctness.
+     */
+    raftNode.config = args->leaderConfig;
+    DEBUG_PRINT("raftProcessAppendEntries: %u try to join the cluster %u.\n", raftNode.me, raftNode.config.clusterId);
+  }
+  if (!raftConfigHasPeer(peerAddress)) {
+    DEBUG_PRINT("raftProcessAppendEntries: Peer %u not in current config, ignore.\n", peerAddress);
+    return;
+  }
   if (args->term < raftNode.currentTerm) {
     DEBUG_PRINT("raftProcessAppendEntries: Peer term = %u < my term = %u, ignore.\n",
                 args->term,
@@ -700,6 +729,7 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
                 raftNode.commitIndex);
     raftNode.commitIndex = MIN(args->leaderCommit, raftNode.log.items[raftNode.log.size - 1].index);
   }
+  raftApplyLog();
   raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, true, raftNode.log.items[raftNode.log.size - 1].index + 1);
 }
 
@@ -726,6 +756,10 @@ void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool s
 
 void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entries_Reply_t *reply) {
   DEBUG_PRINT("raftProcessAppendEntriesReply: %u received append entries reply from %u.\n", raftNode.me, peerAddress);
+  if (!raftConfigHasPeer(peerAddress)) {
+    DEBUG_PRINT("raftProcessAppendEntriesReply: Peer %u not in current config, ignore.\n", peerAddress);
+    return;
+  }
   if (reply->term < raftNode.currentTerm) {
     DEBUG_PRINT("raftProcessAppendEntriesReply: Peer term = %u < my term = %u, ignore.\n",
                 reply->term,
@@ -774,7 +808,7 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
       } else {
         if (reply->nextIndex != 0) {
           if (reply->nextIndex < raftNode.matchIndex[peerAddress]) {
-            DEBUG_PRINT("raftProcessAppendEntriesReply: peer %u may restart, resync all log entries.\n", peerAddress);
+            DEBUG_PRINT("raftProcessAppendEntriesReply: Peer %u may restart, resync all log entries.\n", peerAddress);
             raftNode.nextIndex[peerAddress] = 1;
             raftNode.matchIndex[peerAddress] = 0;
           } else {
@@ -831,8 +865,21 @@ void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
   // TODO: check
   if ((args->command.type == RAFT_LOG_COMMAND_CONFIG_ADD && raftConfigAdd(*(uint16_t *) args->command.payload)) ||
       (args->command.type == RAFT_LOG_COMMAND_CONFIG_REMOVE && raftConfigRemove(*(uint16_t *) args->command.payload))) {
-    /* Here we append a no ops log entry and make current term + 1 to implicitly commit COMMAND_CONFIG */
-    convertToLeader(&raftNode);
+    /* Now use the combination of C_OLD and C_NEW to perform one-step membership change, when the change log is committed,
+     * the log applier will preform the final member change operations (raftConfigAdd or raftConfigRemove).
+     */
+    raftNode.config.currentConfig = raftNode.config.currentConfig | raftNode.config.previousConfig;
+    /* Here we append a no ops log entry and make leader's current term + 1 to implicitly commit COMMAND_CONFIG since
+     * leader can only commit the log entry with term == leader.currentTerm.
+     */
+    Raft_Log_Command_t noOpsLog = {
+        .type = RAFT_LOG_COMMAND_NO_OPS,
+        .requestId = getNextRequestId(),
+        .clientId = raftNode.me,
+        // TODO: init empty payload
+    };
+    raftNode.currentTerm++;
+    raftLogAppend(&raftNode.log, raftNode.currentTerm, &noOpsLog);
   }
 }
 
@@ -884,10 +931,10 @@ uint16_t raftProposeNew(RAFT_LOG_COMMAND_TYPE type, uint8_t *payload, uint16_t s
         .command = {
             .type = type,
             .clientId = raftNode.me,
-            .requestId = requestId
+            .requestId = requestId,
         },
-        // TODO: init payload
     };
+    memcpy(args.command.payload, payload, size);
     raftSendCommand(&args);
   }
   return requestId;
@@ -914,15 +961,26 @@ bool raftProposeCheck(uint16_t requestId, int wait) {
   return raftLeaderApply >= requestId;
 }
 
+void printRaftConfig(Raft_Config_t config) {
+  DEBUG_PRINT("cluster id = %u, size = %u, Members = ", config.clusterId, config.clusterSize);
+  for (int i = 0; i <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
+    if (config.currentConfig & (1 << i)) {
+      DEBUG_PRINT("%d ", i);
+    }
+  }
+  DEBUG_PRINT("\n");
+}
+
 void printRaftLog(Raft_Log_t *raftLog) {
-  DEBUG_PRINT("term\t index\t clientId\t reqId\t type\t \n");
+  DEBUG_PRINT("term\t index\t clientId\t reqId\t type\t commit\t \n");
   for (int i = 0; i < raftLog->size; i++) {
-    DEBUG_PRINT("%u\t %u\t %u\t %u\t %u\t \n",
+    DEBUG_PRINT("%u\t %u\t %u\t %u\t %u\t %u\t \n",
                 raftLog->items[i].term,
                 raftLog->items[i].index,
                 raftLog->items[i].command.clientId,
                 raftLog->items[i].command.requestId,
-                raftLog->items[i].command.type);
+                raftLog->items[i].command.type,
+                raftNode.commitIndex);
   }
 }
 
