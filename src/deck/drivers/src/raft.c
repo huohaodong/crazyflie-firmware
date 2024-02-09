@@ -291,8 +291,8 @@ static void raftApplyLog() {
 static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
-  printRaftConfig(raftNode.config);
-  printRaftLog(&raftNode.log);
+//  printRaftConfig(raftNode.config);
+//  printRaftLog(&raftNode.log);
   if (raftNode.currentState == RAFT_STATE_LEADER) {
     for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
       if (peer != raftNode.me && raftConfigHasPeer(peer) && raftConfigHasPeer(peer)) {
