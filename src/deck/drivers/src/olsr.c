@@ -56,6 +56,7 @@ void olsrInit() {
                              pdTRUE,
                              (void *) 0,
                              olsrTcTimerCallback);
+  xTimerStart(olsrTcTimer, M2T(0));
 
   UWB_Message_Listener_t listener;
   listener.type = UWB_OLSR_MESSAGE;
@@ -71,4 +72,3 @@ void olsrInit() {
               ADHOC_DECK_TASK_PRI,
               &olsrRxTaskHandle);
 }
-
