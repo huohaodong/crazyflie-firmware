@@ -167,13 +167,13 @@ void printRangingTableSet(Ranging_Table_Set_t *set);
 void printRangingMessage(Ranging_Message_t *rangingMessage);
 
 /* Topology Sensing */
-#define NEIGHBOR_BIT_SET_SIZE_MAX 64
+#define NEIGHBOR_ADDRESS_MAX 64
+#define NEIGHBOR_SET_HOLD_TIME (4 * RANGING_PERIOD_MAX)
 
 typedef struct {
   uint64_t bits;
   uint16_t size;
 } Neighbor_Bit_Set_t;
-
 
 typedef void (*neighborSetHook)(UWB_Address_t *);
 
@@ -187,6 +187,7 @@ typedef struct {
   Neighbor_Bit_Set_t twoHop;
   Neighbor_Set_Hooks_t neighborNewHooks; /* hooks for newly added neighbor which neither one-hop nor two-hop */
   Neighbor_Set_Hooks_t neighborExpirationHooks;
+  Time_t expirationTime[NEIGHBOR_ADDRESS_MAX + 1];
   uint16_t size;
 } Neighbor_Set_t;
 
@@ -208,6 +209,7 @@ void neighborSetRemoveTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighbor
 void neighborSetRegisterNewNeighborHook(Neighbor_Set_t *set, neighborSetHook hook);
 void neighborSetRegisterExpirationHook(Neighbor_Set_t *set, neighborSetHook hook);
 void neighborSetHooksInvoke(neighborSetHook *hooks, UWB_Address_t *neighborAddress);
+void neighborSetClearExpire(Neighbor_Set_t *set);
 void printNeighborSet(Neighbor_Set_t *set);
 
 #endif
