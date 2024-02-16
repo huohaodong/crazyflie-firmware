@@ -169,28 +169,45 @@ void printRangingMessage(Ranging_Message_t *rangingMessage);
 /* Topology Sensing */
 #define NEIGHBOR_BIT_SET_SIZE_MAX 64
 
-typedef void (*neighborBitSetHook)(UWB_Address_t *);
-
-typedef struct Neighbor_BitSet_Hook {
-  neighborBitSetHook hook;
-  struct Neighbor_BitSet_Hook_Node *next;
-} Neighbor_BitSet_Hooks_t;
-
 typedef struct {
   uint64_t bits;
   uint16_t size;
-  Neighbor_BitSet_Hooks_t neighborAddHooks;
-  Neighbor_BitSet_Hooks_t neighborRemoveHooks;
 } Neighbor_Bit_Set_t;
 
+
+typedef void (*neighborSetHook)(UWB_Address_t *);
+
+typedef struct Neighbor_Set_Hook {
+  neighborSetHook hook;
+  struct Neighbor_Set_Hook_Node *next;
+} Neighbor_Set_Hooks_t;
+
+typedef struct {
+  Neighbor_Bit_Set_t oneHop;
+  Neighbor_Bit_Set_t twoHop;
+  Neighbor_Set_Hooks_t neighborNewHooks; /* hooks for newly added neighbor which neither one-hop nor two-hop */
+  Neighbor_Set_Hooks_t neighborExpirationHooks;
+  uint16_t size;
+} Neighbor_Set_t;
+
+/* Neighbor Bit Set Operations */
 void neighborBitSetInit(Neighbor_Bit_Set_t *bitSet);
 void neighborBitSetAdd(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress);
 void neighborBitSetRemove(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress);
 void neighborBitSetClear(Neighbor_Bit_Set_t *bitSet);
 bool neighborBitSetHas(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress);
-void neighborBitSetRegisterAddHook(Neighbor_Bit_Set_t *bitSet, neighborBitSetHook hook);
-void neighborBitSetRegisterRemoveHook(Neighbor_Bit_Set_t *bitSet, neighborBitSetHook hook);
-void neighborBitSetHooksInvoke(Neighbor_BitSet_Hooks_t *hooks, UWB_Address_t *neighborAddress);
 void printNeighborBitSet(Neighbor_Bit_Set_t *bitSet);
+
+/* Neighbor Set Operations */
+void neighborSetInit(Neighbor_Set_t *set);
+void neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
+void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
+void neighborSetRemoveOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
+void neighborSetAddTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
+void neighborSetRemoveTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
+void neighborSetRegisterNewNeighborHook(Neighbor_Set_t *set, neighborSetHook hook);
+void neighborSetRegisterExpirationHook(Neighbor_Set_t *set, neighborSetHook hook);
+void neighborSetHooksInvoke(neighborSetHook *hooks, UWB_Address_t *neighborAddress);
+void printNeighborSet(Neighbor_Set_t *set);
 
 #endif
