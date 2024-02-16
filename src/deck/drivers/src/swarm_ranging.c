@@ -976,9 +976,9 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
   for (int i = 0; i < bodyUnitCount; i++) {
     UWB_Address_t curNeighborAddress = rangingMessage->bodyUnits[i].address;
-    if (curNeighborAddress != uwbGetAddress() && curNeighborAddress != neighborAddress) {
+    if (curNeighborAddress != uwbGetAddress()) {
       /* If it is not one-hop neighbor then it is now my two-hop neighbor. */
-      if (!neighborBitSetHas(&neighborSet.twoHop, curNeighborAddress)) {
+      if (!neighborBitSetHas(&neighborSet.oneHop, curNeighborAddress)) {
         neighborSetAddTwoHopNeighbor(&neighborSet, curNeighborAddress);
       } else {
         neighborSetUpdateExpirationTime(&neighborSet, curNeighborAddress);
