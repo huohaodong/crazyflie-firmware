@@ -9,10 +9,9 @@
 #include "debug.h"
 #include "log.h"
 #include "system.h"
-
 #include "routing.h"
-#include "aodv.h"
 #include "olsr.h"
+#include "aodv.h"
 
 #ifndef ROUTING_DEBUG_ENABLE
   #undef DEBUG_PRINT

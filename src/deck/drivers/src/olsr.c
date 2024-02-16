@@ -4,12 +4,25 @@
 #include "autoconf.h"
 #include "debug.h"
 #include "system.h"
-#include "routing.h"
+#include "timers.h"
 #include "olsr.h"
+#include "routing.h"
+
+#ifndef OLSR_DEBUG_ENABLE
+#undef DEBUG_PRINT
+#define DEBUG_PRINT
+#endif
 
 static TaskHandle_t olsrRxTaskHandle;
 static QueueHandle_t rxQueue;
 static Routing_Table_t *routingTable;
+static TimerHandle_t olsrTcTimer;
+
+static void olsrTcTimerCallback(TimerHandle_t timer) {
+  Time_t curTime = xTaskGetTickCount();
+  DEBUG_PRINT("olsrHelloTimerCallback: send tc at %lu.\n", curTime);
+  // TODO: send TC
+}
 
 void olsrRxCallback(void *parameters) {
 //  DEBUG_PRINT("olsrRxCallback\n");
@@ -38,6 +51,11 @@ static void olsrRxTask(void *parameters) {
 void olsrInit() {
   rxQueue = xQueueCreate(OLSR_RX_QUEUE_SIZE, OLSR_RX_QUEUE_ITEM_SIZE);
   routingTable = getGlobalRoutingTable();
+  olsrTcTimer = xTimerCreate("olsrTcTimer",
+                             M2T(OLSR_TC_INTERVAL),
+                             pdTRUE,
+                             (void *) 0,
+                             olsrTcTimerCallback);
 
   UWB_Message_Listener_t listener;
   listener.type = UWB_OLSR_MESSAGE;
