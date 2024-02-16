@@ -1066,12 +1066,14 @@ static void uwbRangingTxTask(void *parameters) {
 
   while (true) {
     xSemaphoreTake(rangingTableSet.mu, portMAX_DELAY);
+    xSemaphoreTake(neighborSet.mu, portMAX_DELAY);
 
     Time_t taskDelay = generateRangingMessage(rangingMessage);
     txPacketCache.header.length = sizeof(UWB_Packet_Header_t) + rangingMessage->header.msgLength;
     uwbSendPacketBlock(&txPacketCache);
 //    printRangingTableSet(&rangingTableSet);
 
+    xSemaphoreGive(neighborSet.mu);
     xSemaphoreGive(rangingTableSet.mu);
     vTaskDelay(taskDelay);
   }
