@@ -478,6 +478,9 @@ void neighborSetAddTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAdd
 void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
   ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
   if (neighborSetHas(set, neighborAddress)) {
+    if (neighborBitSetHas(&set->oneHop, neighborAddress) && neighborBitSetHas(&set->twoHop, neighborAddress)) {
+      ASSERT(0); // impossible
+    }
     set->expirationTime[neighborAddress] = 0;
     if (neighborBitSetHas(&set->oneHop, neighborAddress)) {
       neighborBitSetRemove(&set->oneHop, neighborAddress);
