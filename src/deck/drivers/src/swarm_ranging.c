@@ -409,6 +409,10 @@ static void neighborSetClearExpireTimerCallback(TimerHandle_t timer) {
   xSemaphoreGive(neighborSet.mu);
 }
 
+Neighbor_Set_t *getGlobalNeighborSet() {
+  return &neighborSet;
+}
+
 void neighborSetInit(Neighbor_Set_t *set) {
   set->size = 0;
   set->mu = xSemaphoreCreateMutex();
@@ -433,6 +437,7 @@ void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAdd
   if (!neighborBitSetHas(&set->oneHop, neighborAddress)) {
     /* Add one-hop neighbor. */
     neighborBitSetAdd(&set->oneHop, neighborAddress);
+    neighborSetUpdateExpirationTime(set, neighborAddress);
     /* If neighbor is previous two-hop neighbor, remove it from two-hop neighbor set. */
     if (neighborBitSetHas(&set->twoHop, neighborAddress)) {
       neighborBitSetRemove(&set->twoHop, neighborAddress);
@@ -446,6 +451,7 @@ void neighborSetAddTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAdd
   if (!neighborBitSetHas(&set->twoHop, neighborAddress)) {
     /* Add two-hop neighbor. */
     neighborBitSetAdd(&set->twoHop, neighborAddress);
+    neighborSetUpdateExpirationTime(set, neighborAddress);
     /* If neighbor is previous one-hop neighbor, remove it from one-hop neighbor set. */
     if (neighborBitSetHas(&set->oneHop, neighborAddress)) {
       neighborBitSetRemove(&set->oneHop, neighborAddress);
@@ -937,33 +943,25 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   neighborRangingTable->period = MIN(neighborRangingTable->period, M2T(RANGING_PERIOD_MAX));
   #endif
 
-  /* Add current neighbor to one-hop neighbor set. */
-  // TODO: extract && expiration update && timer
-//  if (!neighborBitSetHas(&oneHopNeighborSet, neighborAddress)) {
-//    /* Add one-hop neighbor. */
-//    neighborBitSetAdd(&oneHopNeighborSet, neighborAddress);
-//    /* If neighbor is previous two-hop neighbor, remove it from two-hop neighbor set. */
-//    if (neighborBitSetHas(&twoHopNeighborSet, neighborAddress)) {
-//      neighborBitSetRemove(&twoHopNeighborSet, neighborAddress);
-//    }
-//  }
-//
-//  /* Infer one-hop and tow-hop neighbors from received ranging message. */
-//  uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
-//  for (int i = 0; i < bodyUnitCount; i++) {
-//    UWB_Address_t curNeighborAddress = rangingMessage->bodyUnits[i].address;
-//    if (curNeighborAddress != uwbGetAddress() && curNeighborAddress != neighborAddress) {
-//      /* If it is not one-hop neighbor then it is now my two-hop neighbor. */
-//      if (!neighborBitSetHas(&twoHopNeighborSet, curNeighborAddress)) {
-//        /* Add tow-hop neighbor. */
-//        neighborBitSetAdd(&twoHopNeighborSet, curNeighborAddress);
-//        /* If neighbor is previous one-hop neighbor, remove it from one-hop neighbor set. */
-//        if (neighborBitSetHas(&oneHopNeighborSet, curNeighborAddress)) {
-//          neighborBitSetRemove(&oneHopNeighborSet, curNeighborAddress);
-//        }
-//      }
-//    }
-//  }
+  if (!neighborBitSetHas(&neighborSet.oneHop, neighborAddress)) {
+    /* Add current neighbor to one-hop neighbor set. */
+    neighborSetAddOneHopNeighbor(&neighborSet, neighborAddress);
+  }
+  neighborSetUpdateExpirationTime(&neighborSet, neighborAddress);
+
+  /* Infer one-hop and tow-hop neighbors from received ranging message. */
+  uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
+  for (int i = 0; i < bodyUnitCount; i++) {
+    UWB_Address_t curNeighborAddress = rangingMessage->bodyUnits[i].address;
+    if (curNeighborAddress != uwbGetAddress() && curNeighborAddress != neighborAddress) {
+      /* If it is not one-hop neighbor then it is now my two-hop neighbor. */
+      if (!neighborBitSetHas(&neighborSet.twoHop, curNeighborAddress)) {
+        neighborSetAddTwoHopNeighbor(&neighborSet, curNeighborAddress);
+      } else {
+        neighborSetUpdateExpirationTime(&neighborSet, curNeighborAddress);
+      }
+    }
+  }
 }
 
 static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
@@ -1061,9 +1059,11 @@ static void uwbRangingRxTask(void *parameters) {
   while (true) {
     if (xQueueReceive(rxQueue, &rxPacketCache, portMAX_DELAY)) {
       xSemaphoreTake(rangingTableSet.mu, portMAX_DELAY);
+      xSemaphoreTake(neighborSet.mu, portMAX_DELAY);
 
       processRangingMessage(&rxPacketCache);
 
+      xSemaphoreGive(neighborSet.mu);
       xSemaphoreGive(rangingTableSet.mu);
     }
     vTaskDelay(M2T(1));
@@ -1103,10 +1103,11 @@ void rangingInit() {
   rxQueue = xQueueCreate(RANGING_RX_QUEUE_SIZE, RANGING_RX_QUEUE_ITEM_SIZE);
   neighborSetInit(&neighborSet);
   neighborSetEvictionTimer = xTimerCreate("neighborSetEvictionTimer",
-                                          M2T(RANGING_TABLE_HOLD_TIME / 2),
+                                          M2T(NEIGHBOR_SET_HOLD_TIME / 4),
                                           pdTRUE,
                                           (void *) 0,
                                           neighborSetClearExpireTimerCallback);
+  xTimerStart(neighborSetEvictionTimer, M2T(0));
   rangingTableSetInit(&rangingTableSet);
   rangingTableSetEvictionTimer = xTimerCreate("rangingTableSetEvictionTimer",
                                               M2T(RANGING_TABLE_HOLD_TIME / 2),

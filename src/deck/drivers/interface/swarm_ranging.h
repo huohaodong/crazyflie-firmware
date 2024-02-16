@@ -201,6 +201,7 @@ bool neighborBitSetHas(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress
 void printNeighborBitSet(Neighbor_Bit_Set_t *bitSet);
 
 /* Neighbor Set Operations */
+Neighbor_Set_t *getGlobalNeighborSet();
 void neighborSetInit(Neighbor_Set_t *set);
 bool neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
