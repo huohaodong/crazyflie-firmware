@@ -5,7 +5,7 @@
 #include "adhocdeck.h"
 #include "semphr.h"
 
-//#define RANGING_DEBUG_ENABLE
+#define RANGING_DEBUG_ENABLE
 
 /* Function Switch */
 //#define ENABLE_BUS_BOARDING_SCHEME
@@ -175,7 +175,7 @@ typedef struct {
   uint16_t size;
 } Neighbor_Bit_Set_t;
 
-typedef void (*neighborSetHook)(UWB_Address_t *);
+typedef void (*neighborSetHook)(UWB_Address_t);
 
 typedef struct Neighbor_Set_Hook {
   neighborSetHook hook;
@@ -183,12 +183,13 @@ typedef struct Neighbor_Set_Hook {
 } Neighbor_Set_Hooks_t;
 
 typedef struct {
+  uint16_t size;
+  SemaphoreHandle_t mu;
   Neighbor_Bit_Set_t oneHop;
   Neighbor_Bit_Set_t twoHop;
   Neighbor_Set_Hooks_t neighborNewHooks; /* hooks for newly added neighbor which neither one-hop nor two-hop */
   Neighbor_Set_Hooks_t neighborExpirationHooks;
   Time_t expirationTime[NEIGHBOR_ADDRESS_MAX + 1];
-  uint16_t size;
 } Neighbor_Set_t;
 
 /* Neighbor Bit Set Operations */
@@ -201,14 +202,14 @@ void printNeighborBitSet(Neighbor_Bit_Set_t *bitSet);
 
 /* Neighbor Set Operations */
 void neighborSetInit(Neighbor_Set_t *set);
-void neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
+bool neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
-void neighborSetRemoveOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetAddTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
-void neighborSetRemoveTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
+void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetRegisterNewNeighborHook(Neighbor_Set_t *set, neighborSetHook hook);
 void neighborSetRegisterExpirationHook(Neighbor_Set_t *set, neighborSetHook hook);
-void neighborSetHooksInvoke(neighborSetHook *hooks, UWB_Address_t *neighborAddress);
+void neighborSetHooksInvoke(Neighbor_Set_Hooks_t *hooks, UWB_Address_t neighborAddress);
+void neighborSetUpdateExpirationTime(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetClearExpire(Neighbor_Set_t *set);
 void printNeighborSet(Neighbor_Set_t *set);
 

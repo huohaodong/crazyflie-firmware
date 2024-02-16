@@ -972,37 +972,136 @@ bool neighborBitSetHas(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress
   return (bitSet->bits & (1ULL << neighborAddress)) != 0;
 }
 
-//void neighborBitSetRegisterAddHook(Neighbor_Bit_Set_t *bitSet, neighborBitSetHook hook) {
-//  ASSERT(hook);
-//  Neighbor_BitSet_Hooks_t cur = {
-//      .hook = hook,
-//      .next = (struct Neighbor_BitSet_Hook_Node *) bitSet->neighborAddHooks.hook
-//  };
-//  bitSet->neighborAddHooks = cur;
-//}
-//
-//void neighborBitSetRegisterRemoveHook(Neighbor_Bit_Set_t *bitSet, neighborBitSetHook hook) {
-//  ASSERT(hook);
-//  Neighbor_BitSet_Hooks_t cur = {
-//      .hook = hook,
-//      .next = (struct Neighbor_BitSet_Hook_Node *) bitSet->neighborRemoveHooks.hook
-//  };
-//  bitSet->neighborRemoveHooks = cur;
-//}
-//
-//void neighborBitSetHooksInvoke(Neighbor_BitSet_Hooks_t *hooks, UWB_Address_t *neighborAddress) {
-//  neighborBitSetHook cur = hooks->hook;
-//  while (cur != NULL) {
-//    DEBUG_PRINT("neighborBitSetHooksInvoke: Invoke neighbor bit set hook.\n");
-//    cur(neighborAddress);
-//    cur = (neighborBitSetHook) hooks->next;
-//  }
-//}
-
 void printNeighborBitSet(Neighbor_Bit_Set_t *bitSet) {
   DEBUG_PRINT("%u has %u neighbors = ", uwbGetAddress(), bitSet->size);
   for (int neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
     if (neighborBitSetHas(bitSet, neighborAddress)) {
+      DEBUG_PRINT("%u ", neighborAddress);
+    }
+  }
+  DEBUG_PRINT("\n");
+}
+
+void neighborSetInit(Neighbor_Set_t *set) {
+  set->size = 0;
+  set->mu = xSemaphoreCreateMutex();
+  neighborBitSetInit(&set->oneHop);
+  neighborBitSetInit(&set->twoHop);
+  set->neighborNewHooks.hook = NULL;
+  set->neighborNewHooks.next = NULL;
+  set->neighborExpirationHooks.hook = NULL;
+  set->neighborExpirationHooks.next = NULL;
+  for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
+    set->expirationTime[neighborAddress] = 0;
+  }
+}
+
+bool neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  return neighborBitSetHas(&set->oneHop, neighborAddress) && neighborBitSetHas(&set->twoHop, neighborAddress);
+}
+
+void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  if (!neighborBitSetHas(&set->oneHop, neighborAddress)) {
+    /* Add one-hop neighbor. */
+    neighborBitSetAdd(&set->oneHop, neighborAddress);
+    /* If neighbor is previous two-hop neighbor, remove it from two-hop neighbor set. */
+    if (neighborBitSetHas(&set->twoHop, neighborAddress)) {
+      neighborBitSetRemove(&set->twoHop, neighborAddress);
+    }
+  }
+  set->size = set->oneHop.size + set->twoHop.size;
+}
+
+void neighborSetAddTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  if (!neighborBitSetHas(&set->twoHop, neighborAddress)) {
+    /* Add two-hop neighbor. */
+    neighborBitSetAdd(&set->twoHop, neighborAddress);
+    /* If neighbor is previous one-hop neighbor, remove it from one-hop neighbor set. */
+    if (neighborBitSetHas(&set->oneHop, neighborAddress)) {
+      neighborBitSetRemove(&set->oneHop, neighborAddress);
+    }
+  }
+  set->size = set->oneHop.size + set->twoHop.size;
+}
+
+void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  if (neighborSetHas(set, neighborAddress)) {
+    set->expirationTime[neighborAddress] = 0;
+    if (neighborBitSetHas(&set->oneHop, neighborAddress)) {
+      neighborBitSetRemove(&set->oneHop, neighborAddress);
+    } else if (neighborBitSetHas(&set->twoHop, neighborAddress)) {
+      neighborBitSetRemove(&set->twoHop, neighborAddress);
+    } else {
+      ASSERT(0); // impossible
+    }
+  }
+  set->size = set->oneHop.size + set->twoHop.size;
+}
+
+void neighborSetRegisterNewNeighborHook(Neighbor_Set_t *set, neighborSetHook hook) {
+  ASSERT(hook);
+  Neighbor_Set_Hooks_t cur = {
+      .hook = hook,
+      .next = (struct Neighbor_Set_Hook_Node *) set->neighborNewHooks.hook
+  };
+  set->neighborNewHooks = cur;
+}
+
+void neighborSetRegisterExpirationHook(Neighbor_Set_t *set, neighborSetHook hook) {
+  ASSERT(hook);
+  Neighbor_Set_Hooks_t cur = {
+      .hook = hook,
+      .next = (struct Neighbor_Set_Hook_Node *) set->neighborExpirationHooks.hook
+  };
+  set->neighborExpirationHooks = cur;
+}
+
+void neighborSetHooksInvoke(Neighbor_Set_Hooks_t *hooks, UWB_Address_t neighborAddress) {
+  neighborSetHook cur = hooks->hook;
+  while (cur != NULL) {
+    DEBUG_PRINT("neighborSetHooksInvoke: Invoke neighbor set hook.\n");
+    cur(neighborAddress);
+    cur = (neighborSetHook) hooks->next;
+  }
+}
+
+void neighborSetUpdateExpirationTime(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  set->expirationTime[neighborAddress] = xTaskGetTickCount() + M2T(NEIGHBOR_SET_HOLD_TIME);
+}
+
+void neighborSetClearExpire(Neighbor_Set_t *set) {
+  Time_t curTime = xTaskGetTickCount();
+  for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
+    if (set->expirationTime[neighborAddress] <= curTime) {
+      neighborSetRemoveNeighbor(set, neighborAddress);
+      DEBUG_PRINT("neighborSetClearExpire: neighbor %u expire at %lu.\n", neighborAddress, curTime);
+      neighborSetHooksInvoke(&set->neighborExpirationHooks, neighborAddress);
+    }
+  }
+}
+
+void printNeighborSet(Neighbor_Set_t *set) {
+  DEBUG_PRINT("%u has %u one hop neighbors, %u two hop neighbors, %u neighbors in total.\n",
+              uwbGetAddress(),
+              set->oneHop.size,
+              set->twoHop.size,
+              set->size
+  );
+  DEBUG_PRINT("one hop neighbors = ");
+  for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
+    if (neighborBitSetHas(&set->oneHop, neighborAddress)) {
+      DEBUG_PRINT("%u ", neighborAddress);
+    }
+  }
+  DEBUG_PRINT("\n");
+  DEBUG_PRINT("two hop neighbors = ");
+  for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
+    if (neighborBitSetHas(&set->twoHop, neighborAddress)) {
       DEBUG_PRINT("%u ", neighborAddress);
     }
   }
