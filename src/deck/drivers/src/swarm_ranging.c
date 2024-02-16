@@ -424,6 +424,7 @@ void neighborSetInit(Neighbor_Set_t *set) {
   set->neighborExpirationHooks.next = NULL;
   for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
     set->expirationTime[neighborAddress] = 0;
+    neighborBitSetInit(&set->twoHopReachSets[neighborAddress]);
   }
 }
 
@@ -487,6 +488,14 @@ void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddres
     }
   }
   set->size = set->oneHop.size + set->twoHop.size;
+}
+
+void neighborSetAddRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to) {
+  // TODO
+}
+
+void neighborSetRemoveRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to) {
+  // TODO
 }
 
 void neighborSetRegisterNewNeighborHook(Neighbor_Set_t *set, neighborSetHook hook) {
