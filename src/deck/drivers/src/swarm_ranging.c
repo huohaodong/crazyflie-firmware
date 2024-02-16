@@ -23,8 +23,7 @@
 static uint16_t MY_UWB_ADDRESS;
 
 static QueueHandle_t rxQueue;
-static Neighbor_Bit_Set_t oneHopNeighborSet;
-static Neighbor_Bit_Set_t twoHopNeighborSet;
+static Neighbor_Set_t neighborSet;
 static Ranging_Table_Set_t rangingTableSet;
 static TimerHandle_t rangingTableSetEvictionTimer;
 static UWB_Message_Listener_t listener;
@@ -750,31 +749,32 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   #endif
 
   /* Add current neighbor to one-hop neighbor set. */
-  if (!neighborBitSetHas(&oneHopNeighborSet, neighborAddress)) {
-    /* Add one-hop neighbor. */
-    neighborBitSetAdd(&oneHopNeighborSet, neighborAddress);
-    /* If neighbor is previous two-hop neighbor, remove it from two-hop neighbor set. */
-    if (neighborBitSetHas(&twoHopNeighborSet, neighborAddress)) {
-      neighborBitSetRemove(&twoHopNeighborSet, neighborAddress);
-    }
-  }
-
-  /* Infer one-hop and tow-hop neighbors from received ranging message. */
-  uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
-  for (int i = 0; i < bodyUnitCount; i++) {
-    UWB_Address_t curNeighborAddress = rangingMessage->bodyUnits[i].address;
-    if (curNeighborAddress != uwbGetAddress() && curNeighborAddress != neighborAddress) {
-      /* If it is not one-hop neighbor then it is now my two-hop neighbor. */
-      if (!neighborBitSetHas(&twoHopNeighborSet, curNeighborAddress)) {
-        /* Add tow-hop neighbor. */
-        neighborBitSetAdd(&twoHopNeighborSet, curNeighborAddress);
-        /* If neighbor is previous one-hop neighbor, remove it from one-hop neighbor set. */
-        if (neighborBitSetHas(&oneHopNeighborSet, curNeighborAddress)) {
-          neighborBitSetRemove(&oneHopNeighborSet, curNeighborAddress);
-        }
-      }
-    }
-  }
+  // TODO: extract && expiration update && timer
+//  if (!neighborBitSetHas(&oneHopNeighborSet, neighborAddress)) {
+//    /* Add one-hop neighbor. */
+//    neighborBitSetAdd(&oneHopNeighborSet, neighborAddress);
+//    /* If neighbor is previous two-hop neighbor, remove it from two-hop neighbor set. */
+//    if (neighborBitSetHas(&twoHopNeighborSet, neighborAddress)) {
+//      neighborBitSetRemove(&twoHopNeighborSet, neighborAddress);
+//    }
+//  }
+//
+//  /* Infer one-hop and tow-hop neighbors from received ranging message. */
+//  uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
+//  for (int i = 0; i < bodyUnitCount; i++) {
+//    UWB_Address_t curNeighborAddress = rangingMessage->bodyUnits[i].address;
+//    if (curNeighborAddress != uwbGetAddress() && curNeighborAddress != neighborAddress) {
+//      /* If it is not one-hop neighbor then it is now my two-hop neighbor. */
+//      if (!neighborBitSetHas(&twoHopNeighborSet, curNeighborAddress)) {
+//        /* Add tow-hop neighbor. */
+//        neighborBitSetAdd(&twoHopNeighborSet, curNeighborAddress);
+//        /* If neighbor is previous one-hop neighbor, remove it from one-hop neighbor set. */
+//        if (neighborBitSetHas(&oneHopNeighborSet, curNeighborAddress)) {
+//          neighborBitSetRemove(&oneHopNeighborSet, curNeighborAddress);
+//        }
+//      }
+//    }
+//  }
 }
 
 static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
@@ -912,8 +912,7 @@ void rangingTxCallback(void *parameters) {
 void rangingInit() {
   MY_UWB_ADDRESS = uwbGetAddress();
   rxQueue = xQueueCreate(RANGING_RX_QUEUE_SIZE, RANGING_RX_QUEUE_ITEM_SIZE);
-  neighborBitSetInit(&oneHopNeighborSet);
-  neighborBitSetInit(&twoHopNeighborSet);
+  neighborSetInit(&neighborSet);
   rangingTableSetInit(&rangingTableSet);
   rangingTableSetEvictionTimer = xTimerCreate("rangingTableSetCleanTimer",
                                               M2T(RANGING_TABLE_HOLD_TIME / 2),
