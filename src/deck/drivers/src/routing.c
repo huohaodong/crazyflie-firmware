@@ -12,6 +12,7 @@
 
 #include "routing.h"
 #include "aodv.h"
+#include "olsr.h"
 
 #ifndef ROUTING_DEBUG_ENABLE
   #undef DEBUG_PRINT
@@ -379,6 +380,9 @@ void routingInit() {
               &uwbRoutingRxTaskHandle);
   #ifdef ROUTING_AODV_ENABLE
   aodvInit();
+  #endif
+  #ifdef ROUTING_OLSR_ENABLE
+  olsrInit();
   #endif
 }
 
