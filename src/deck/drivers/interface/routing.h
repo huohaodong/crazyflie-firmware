@@ -5,7 +5,7 @@
 #include "adhocdeck.h"
 
 //#define ROUTING_DEBUG_ENABLE
-#define ROUTING_AODV_ENABLE
+//#define ROUTING_AODV_ENABLE // TODO: enable
 #define ROUTING_OLSR_ENABLE
 
 /* Queue Constants */
