@@ -166,4 +166,26 @@ void printRangingTable(Ranging_Table_t *rangingTable);
 void printRangingTableSet(Ranging_Table_Set_t *set);
 void printRangingMessage(Ranging_Message_t *rangingMessage);
 
+/* Topology Sensing */
+typedef void (*neighborBitSetHook)(UWB_Address_t *);
+
+typedef struct Neighbor_BitSet_Hook {
+  neighborBitSetHook hook;
+  struct Neighbor_BitSet_Hook_Node *next;
+} Neighbor_BitSet_Hooks_t;
+
+typedef struct {
+  uint64_t bits;
+  Neighbor_BitSet_Hooks_t neighborAddHooks;
+  Neighbor_BitSet_Hooks_t neighborRemoveHooks;
+} Neighbor_Bit_Set_t;
+
+void neighborBitSetInit(Neighbor_Bit_Set_t *bitSet);
+void neighborBitSetAdd(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress);
+void neighborBitSetRemove(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress);
+void neighborBitSetClear(Neighbor_Bit_Set_t *bitSet);
+void neighborBitSetRegisterAddHook(Neighbor_Bit_Set_t *bitSet, neighborBitSetHook hook);
+void neighborBitSetRegisterRemoveHook(Neighbor_Bit_Set_t *bitSet, neighborBitSetHook hook);
+void neighborBitSetHooksInvoke(Neighbor_BitSet_Hooks_t *hooks, UWB_Address_t *neighborAddress);
+
 #endif
