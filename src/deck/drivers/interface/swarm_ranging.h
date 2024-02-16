@@ -187,6 +187,9 @@ typedef struct {
   SemaphoreHandle_t mu;
   Neighbor_Bit_Set_t oneHop;
   Neighbor_Bit_Set_t twoHop;
+  // TODO: twoHopReachSet oneHopNeighbors that can reach to twoHop neighbor
+  // add: infer from ranging message;
+  // remove: oneHop neighbor is removed.
   Neighbor_Set_Hooks_t neighborNewHooks; /* hooks for newly added neighbor which neither one-hop nor two-hop */
   Neighbor_Set_Hooks_t neighborExpirationHooks;
   Time_t expirationTime[NEIGHBOR_ADDRESS_MAX + 1];
