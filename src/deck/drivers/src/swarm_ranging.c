@@ -434,6 +434,10 @@ bool neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
 
 void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
   ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  bool isNewNeighbor = false;
+  if (!neighborSetHas(set, neighborAddress)) {
+    isNewNeighbor = true;
+  }
   if (!neighborBitSetHas(&set->oneHop, neighborAddress)) {
     /* Add one-hop neighbor. */
     neighborBitSetAdd(&set->oneHop, neighborAddress);
@@ -444,10 +448,17 @@ void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAdd
     }
   }
   set->size = set->oneHop.size + set->twoHop.size;
+  if (isNewNeighbor) {
+    neighborSetHooksInvoke(&set->neighborNewHooks, neighborAddress);
+  }
 }
 
 void neighborSetAddTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
   ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  bool isNewNeighbor = false;
+  if (!neighborSetHas(set, neighborAddress)) {
+    isNewNeighbor = true;
+  }
   if (!neighborBitSetHas(&set->twoHop, neighborAddress)) {
     /* Add two-hop neighbor. */
     neighborBitSetAdd(&set->twoHop, neighborAddress);
@@ -458,6 +469,9 @@ void neighborSetAddTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAdd
     }
   }
   set->size = set->oneHop.size + set->twoHop.size;
+  if (isNewNeighbor) {
+    neighborSetHooksInvoke(&set->neighborNewHooks, neighborAddress);
+  }
 }
 
 void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
