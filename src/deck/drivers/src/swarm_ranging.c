@@ -908,6 +908,82 @@ void rangingInit() {
               ADHOC_DECK_TASK_PRI, &uwbRangingRxTaskHandle);
 }
 
+void neighborBitSetInit(Neighbor_Bit_Set_t *bitSet) {
+  bitSet->bits = 0;
+  bitSet->size = 0;
+  bitSet->neighborAddHooks.hook = NULL;
+  bitSet->neighborAddHooks.next = NULL;
+  bitSet->neighborRemoveHooks.hook = NULL;
+  bitSet->neighborRemoveHooks.next = NULL;
+}
+
+void neighborBitSetAdd(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_BIT_SET_SIZE_MAX);
+  uint64_t prevBits = bitSet->bits;
+  bitSet->bits |= (1ULL << neighborAddress);
+  if (prevBits != bitSet->bits) {
+    bitSet->size++;
+    // TODO: invoke add hooks
+  }
+}
+
+void neighborBitSetRemove(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_BIT_SET_SIZE_MAX);
+  uint64_t prevBits = bitSet->bits;
+  bitSet->bits &= ~(1ULL << neighborAddress);
+  if (prevBits != bitSet->bits) {
+    bitSet->size--;
+    // TODO: invoke remove hooks
+  }
+}
+
+void neighborBitSetClear(Neighbor_Bit_Set_t *bitSet) {
+  bitSet->bits = 0;
+  bitSet->size = 0;
+}
+
+bool neighborBitSetHas(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_BIT_SET_SIZE_MAX);
+  return (bitSet->bits & (1ULL << neighborAddress)) != 0;
+}
+
+void neighborBitSetRegisterAddHook(Neighbor_Bit_Set_t *bitSet, neighborBitSetHook hook) {
+  ASSERT(hook);
+  Neighbor_BitSet_Hooks_t cur = {
+      .hook = hook,
+      .next = (struct Neighbor_BitSet_Hook_Node *) bitSet->neighborAddHooks.hook
+  };
+  bitSet->neighborAddHooks = cur;
+}
+
+void neighborBitSetRegisterRemoveHook(Neighbor_Bit_Set_t *bitSet, neighborBitSetHook hook) {
+  ASSERT(hook);
+  Neighbor_BitSet_Hooks_t cur = {
+      .hook = hook,
+      .next = (struct Neighbor_BitSet_Hook_Node *) bitSet->neighborRemoveHooks.hook
+  };
+  bitSet->neighborRemoveHooks = cur;
+}
+
+void neighborBitSetHooksInvoke(Neighbor_BitSet_Hooks_t *hooks, UWB_Address_t *neighborAddress) {
+  neighborBitSetHook cur = hooks->hook;
+  while (cur != NULL) {
+    DEBUG_PRINT("neighborBitSetHooksInvoke: Invoke neighbor bit set hook.\n");
+    cur(neighborAddress);
+    cur = (neighborBitSetHook) hooks->next;
+  }
+}
+
+void printNeighborBitSet(Neighbor_Bit_Set_t *bitSet) {
+  DEBUG_PRINT("%u has %u neighbors = ", uwbGetAddress(), bitSet->size);
+  for (int neighborAddress = 0; neighborAddress <= NEIGHBOR_BIT_SET_SIZE_MAX; neighborAddress++) {
+    if (neighborBitSetHas(bitSet, neighborAddress)) {
+      DEBUG_PRINT("%u ", neighborAddress);
+    }
+  }
+  DEBUG_PRINT("\n");
+}
+
 LOG_GROUP_START(Ranging)
         LOG_ADD(LOG_INT16, distTo1, distanceTowards + 1)
         LOG_ADD(LOG_INT16, distTo2, distanceTowards + 2)
