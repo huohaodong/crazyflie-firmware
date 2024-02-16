@@ -23,6 +23,8 @@
 static uint16_t MY_UWB_ADDRESS;
 
 static QueueHandle_t rxQueue;
+static Neighbor_Bit_Set_t oneHopNeighborSet;
+static Neighbor_Bit_Set_t twoHopNeighborSet;
 static Ranging_Table_Set_t rangingTableSet;
 static TimerHandle_t rangingTableSetEvictionTimer;
 static UWB_Message_Listener_t listener;
@@ -746,6 +748,9 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   neighborRangingTable->period = MAX(neighborRangingTable->period, M2T(RANGING_PERIOD_MIN));
   neighborRangingTable->period = MIN(neighborRangingTable->period, M2T(RANGING_PERIOD_MAX));
   #endif
+
+  /* Infer one-hop and tow-hop neighbors. */
+
 }
 
 static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
@@ -883,6 +888,8 @@ void rangingTxCallback(void *parameters) {
 void rangingInit() {
   MY_UWB_ADDRESS = uwbGetAddress();
   rxQueue = xQueueCreate(RANGING_RX_QUEUE_SIZE, RANGING_RX_QUEUE_ITEM_SIZE);
+  neighborBitSetInit(&oneHopNeighborSet);
+  neighborBitSetInit(&twoHopNeighborSet);
   rangingTableSetInit(&rangingTableSet);
   rangingTableSetEvictionTimer = xTimerCreate("rangingTableSetCleanTimer",
                                               M2T(RANGING_TABLE_HOLD_TIME / 2),
