@@ -210,7 +210,7 @@ void neighborSetRegisterNewNeighborHook(Neighbor_Set_t *set, neighborSetHook hoo
 void neighborSetRegisterExpirationHook(Neighbor_Set_t *set, neighborSetHook hook);
 void neighborSetHooksInvoke(Neighbor_Set_Hooks_t *hooks, UWB_Address_t neighborAddress);
 void neighborSetUpdateExpirationTime(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
-void neighborSetClearExpire(Neighbor_Set_t *set);
+int neighborSetClearExpire(Neighbor_Set_t *set);
 void printNeighborSet(Neighbor_Set_t *set);
 
 #endif
