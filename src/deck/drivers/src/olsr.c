@@ -47,6 +47,16 @@ void mprSetClear(MPR_Set_t *set) {
   neighborBitSetClear(set);
 }
 
+void printMPRSet(MPR_Set_t *set) {
+  DEBUG_PRINT("%u has %u mpr neighbors = ", uwbGetAddress(), set->size);
+  for (int neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
+    if (mprSetHas(set, neighborAddress)) {
+      DEBUG_PRINT("%u ", neighborAddress);
+    }
+  }
+  DEBUG_PRINT("\n");
+}
+
 static void computeMPR(Neighbor_Set_t *set) {
   // TODO
 }
@@ -67,11 +77,13 @@ static void olsrRxTask(void *parameters) {
   while (true) {
     if (uwbReceivePacketBlock(UWB_OLSR_MESSAGE, &rxPacketCache)) {
       xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
+      xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
       xSemaphoreTake(routingTable->mu, portMAX_DELAY);
 
       // TODO: process TC
 
       xSemaphoreGive(routingTable->mu);
+      xSemaphoreGive(neighborSet->mu);
       xSemaphoreGive(olsrSetsMutex);
     }
     vTaskDelay(M2T(1));

@@ -26,4 +26,7 @@ void mprSetClear(MPR_Set_t *set);
 
 void olsrInit();
 
+/* Debug Operations */
+void printMPRSet(MPR_Set_t *set);
+
 #endif
