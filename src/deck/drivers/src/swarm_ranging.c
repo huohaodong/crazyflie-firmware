@@ -383,32 +383,6 @@ bool neighborBitSetHas(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress
   return (bitSet->bits & (1ULL << neighborAddress)) != 0;
 }
 
-void printNeighborBitSet(Neighbor_Bit_Set_t *bitSet) {
-  DEBUG_PRINT("%u has %u neighbors = ", uwbGetAddress(), bitSet->size);
-  for (int neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
-    if (neighborBitSetHas(bitSet, neighborAddress)) {
-      DEBUG_PRINT("%u ", neighborAddress);
-    }
-  }
-  DEBUG_PRINT("\n");
-}
-// TODO: check
-static void neighborSetClearExpireTimerCallback(TimerHandle_t timer) {
-  xSemaphoreTake(neighborSet.mu, portMAX_DELAY);
-
-  Time_t curTime = xTaskGetTickCount();
-  DEBUG_PRINT("neighborSetClearExpireTimerCallback: Trigger expiration timer at %lu.\n", curTime);
-
-  int evictionCount = neighborSetClearExpire(&neighborSet);
-  if (evictionCount > 0) {
-    DEBUG_PRINT("neighborSetClearExpireTimerCallback: Evict total %d neighbors.\n", evictionCount);
-  } else {
-    DEBUG_PRINT("neighborSetClearExpireTimerCallback: Evict none.\n");
-  }
-
-  xSemaphoreGive(neighborSet.mu);
-}
-
 Neighbor_Set_t *getGlobalNeighborSet() {
   return &neighborSet;
 }
@@ -579,39 +553,21 @@ int neighborSetClearExpire(Neighbor_Set_t *set) {
   return evictionCount;
 }
 
-void printNeighborSet(Neighbor_Set_t *set) {
-  DEBUG_PRINT("%u has %u one hop neighbors, %u two hop neighbors, %u neighbors in total.\n",
-              uwbGetAddress(),
-              set->oneHop.size,
-              set->twoHop.size,
-              set->size
-  );
-  DEBUG_PRINT("one-hop neighbors = ");
-  for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
-    if (neighborBitSetHas(&set->oneHop, oneHopNeighbor)) {
-      DEBUG_PRINT("%u ", oneHopNeighbor);
-    }
+// TODO: check
+static void neighborSetClearExpireTimerCallback(TimerHandle_t timer) {
+  xSemaphoreTake(neighborSet.mu, portMAX_DELAY);
+
+  Time_t curTime = xTaskGetTickCount();
+  DEBUG_PRINT("neighborSetClearExpireTimerCallback: Trigger expiration timer at %lu.\n", curTime);
+
+  int evictionCount = neighborSetClearExpire(&neighborSet);
+  if (evictionCount > 0) {
+    DEBUG_PRINT("neighborSetClearExpireTimerCallback: Evict total %d neighbors.\n", evictionCount);
+  } else {
+    DEBUG_PRINT("neighborSetClearExpireTimerCallback: Evict none.\n");
   }
-  DEBUG_PRINT("\n");
-  DEBUG_PRINT("two-hop neighbors = ");
-  for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
-    if (neighborBitSetHas(&set->twoHop, twoHopNeighbor)) {
-      DEBUG_PRINT("%u ", twoHopNeighbor);
-    }
-  }
-  DEBUG_PRINT("\n");
-  for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
-    if (!neighborBitSetHas(&set->twoHop, twoHopNeighbor)) {
-      continue;
-    }
-    DEBUG_PRINT("to two-hop neighbor %u: ", twoHopNeighbor);
-    for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
-      if (neighborSetHasRelation(set, oneHopNeighbor, twoHopNeighbor)) {
-        DEBUG_PRINT("%u ", oneHopNeighbor);
-      }
-    }
-    DEBUG_PRINT("\n");
-  }
+
+  xSemaphoreGive(neighborSet.mu);
 }
 
 void printRangingTable(Ranging_Table_t *table) {
@@ -668,6 +624,50 @@ void printRangingMessage(Ranging_Message_t *rangingMessage) {
   }
 }
 
+void printNeighborBitSet(Neighbor_Bit_Set_t *bitSet) {
+  DEBUG_PRINT("%u has %u neighbors = ", uwbGetAddress(), bitSet->size);
+  for (int neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
+    if (neighborBitSetHas(bitSet, neighborAddress)) {
+      DEBUG_PRINT("%u ", neighborAddress);
+    }
+  }
+  DEBUG_PRINT("\n");
+}
+
+void printNeighborSet(Neighbor_Set_t *set) {
+  DEBUG_PRINT("%u has %u one hop neighbors, %u two hop neighbors, %u neighbors in total.\n",
+              uwbGetAddress(),
+              set->oneHop.size,
+              set->twoHop.size,
+              set->size
+  );
+  DEBUG_PRINT("one-hop neighbors = ");
+  for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
+    if (neighborBitSetHas(&set->oneHop, oneHopNeighbor)) {
+      DEBUG_PRINT("%u ", oneHopNeighbor);
+    }
+  }
+  DEBUG_PRINT("\n");
+  DEBUG_PRINT("two-hop neighbors = ");
+  for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
+    if (neighborBitSetHas(&set->twoHop, twoHopNeighbor)) {
+      DEBUG_PRINT("%u ", twoHopNeighbor);
+    }
+  }
+  DEBUG_PRINT("\n");
+  for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
+    if (!neighborBitSetHas(&set->twoHop, twoHopNeighbor)) {
+      continue;
+    }
+    DEBUG_PRINT("to two-hop neighbor %u: ", twoHopNeighbor);
+    for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
+      if (neighborSetHasRelation(set, oneHopNeighbor, twoHopNeighbor)) {
+        DEBUG_PRINT("%u ", oneHopNeighbor);
+      }
+    }
+    DEBUG_PRINT("\n");
+  }
+}
 
 static int16_t computeDistance(Timestamp_Tuple_t Tp, Timestamp_Tuple_t Rp,
                                Timestamp_Tuple_t Tr, Timestamp_Tuple_t Rr,
