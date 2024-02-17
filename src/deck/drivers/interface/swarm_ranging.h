@@ -27,7 +27,7 @@
 #define MAX_Tr_UNIT 3
 #define MAX_BODY_UNIT 7
 //#define MAX_BODY_UNIT (UWB_FRAME_LEN_MAX - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t) // 1 ~ 83
-#define RANGING_TABLE_SIZE_MAX 10 // default up to 10 neighbors
+#define RANGING_TABLE_SIZE_MAX 10 // default up to 10 one-hop neighbors
 #define RANGING_TABLE_HOLD_TIME (6 * RANGING_PERIOD_MAX)
 #define Tr_Rr_BUFFER_POOL_SIZE 3
 #define Tf_BUFFER_POOL_SIZE (2 * RANGING_PERIOD_MAX / RANGING_PERIOD_MIN)

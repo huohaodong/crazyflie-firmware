@@ -37,8 +37,22 @@ static int rangingSeqNumber = 1;
 static logVarId_t idVelocityX, idVelocityY, idVelocityZ;
 static float velocity;
 static Ranging_Table_t EMPTY_RANGING_TABLE = {
-    .state = RANGING_STATE_S1,
     .neighborAddress = UWB_DEST_EMPTY,
+    .Rp.timestamp.full = 0,
+    .Rp.seqNumber = 0,
+    .Tp.timestamp.full = 0,
+    .Tp.seqNumber = 0,
+    .Rf.timestamp.full = 0,
+    .Rf.seqNumber = 0,
+    .Tf.timestamp.full = 0,
+    .Tf.seqNumber = 0,
+    .Re.timestamp.full = 0,
+    .Re.seqNumber = 0,
+    .latestReceived.timestamp.full = 0,
+    .latestReceived.seqNumber = 0,
+    .TrRrBuffer.cur = 0,
+    .TrRrBuffer.latest = 0,
+    .state = RANGING_STATE_S1,
     .period = RANGING_PERIOD,
     .nextExpectedDeliveryTime = M2T(RANGING_PERIOD),
     .expirationTime = M2T(RANGING_TABLE_HOLD_TIME),
@@ -1119,7 +1133,7 @@ static void uwbRangingTxTask(void *parameters) {
     txPacketCache.header.length = sizeof(UWB_Packet_Header_t) + rangingMessage->header.msgLength;
     uwbSendPacketBlock(&txPacketCache);
 //    printRangingTableSet(&rangingTableSet);
-    printNeighborSet(&neighborSet);
+//    printNeighborSet(&neighborSet);
 
     xSemaphoreGive(neighborSet.mu);
     xSemaphoreGive(rangingTableSet.mu);
