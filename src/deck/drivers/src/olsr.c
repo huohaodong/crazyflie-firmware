@@ -19,12 +19,44 @@ static SemaphoreHandle_t olsrSetsMutex;
 static Routing_Table_t *routingTable;
 static Neighbor_Set_t *neighborSet;
 static MPR_Set_t mprSet;
+static TimerHandle_t mprComputeTimer;
 static TimerHandle_t olsrTcTimer;
 
+static void computeMPR() {
+  mprSetClear(&mprSet);
+
+}
+
 static void olsrTcTimerCallback(TimerHandle_t timer) {
-  Time_t curTime = xTaskGetTickCount();
-//  DEBUG_PRINT("olsrHelloTimerCallback: send tc at %lu.\n", curTime);
   // TODO: send TC
+}
+
+static void mprComputeTimerCallback(TimerHandle_t timer) {
+  xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
+  xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
+  computeMPR();
+  xSemaphoreGive(neighborSet->mu);
+  xSemaphoreGive(olsrSetsMutex);
+}
+
+void olsrNewNeighborHook(UWB_Address_t neighborAddress) {
+  if (mprSetHas(&mprSet, neighborAddress)) {
+    xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
+    xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
+    computeMPR();
+    xSemaphoreGive(neighborSet->mu);
+    xSemaphoreGive(olsrSetsMutex);
+  }
+}
+
+void olsrNeighborExpirationHook(UWB_Address_t neighborAddress) {
+  if (mprSetHas(&mprSet, neighborAddress)) {
+    xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
+    xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
+    computeMPR();
+    xSemaphoreGive(neighborSet->mu);
+    xSemaphoreGive(olsrSetsMutex);
+  }
 }
 
 void mprSetInit(MPR_Set_t *set) {
@@ -55,10 +87,6 @@ void printMPRSet(MPR_Set_t *set) {
     }
   }
   DEBUG_PRINT("\n");
-}
-
-static void computeMPR(Neighbor_Set_t *set) {
-  // TODO
 }
 
 void olsrRxCallback(void *parameters) {
@@ -96,8 +124,15 @@ void olsrInit() {
   olsrSetsMutex = xSemaphoreCreateMutex();
   routingTable = getGlobalRoutingTable();
   neighborSet = getGlobalNeighborSet();
+  neighborSetRegisterNewNeighborHook(neighborSet, olsrNewNeighborHook);
+  neighborSetRegisterExpirationHook(neighborSet, olsrNeighborExpirationHook);
   mprSetInit(&mprSet);
-
+  mprComputeTimer = xTimerCreate("mprComputeTimer",
+                                 M2T(OLSR_MPR_COMPUTE_INTERVAL),
+                                 pdTRUE,
+                                 (void *) 0,
+                                 mprComputeTimerCallback);
+  xTimerStart(mprComputeTimer, M2T(0));
   olsrTcTimer = xTimerCreate("olsrTcTimer",
                              M2T(OLSR_TC_INTERVAL),
                              pdTRUE,

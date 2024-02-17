@@ -10,6 +10,7 @@
 #define OLSR_RX_QUEUE_ITEM_SIZE sizeof (UWB_Packet_t)
 
 /* OLSR Message Constants */
+#define OLSR_MPR_COMPUTE_INTERVAL 2000
 #define OLSR_TC_INTERVAL 500
 
 typedef Neighbor_Bit_Set_t MPR_Set_t;
