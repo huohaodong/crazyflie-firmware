@@ -569,6 +569,30 @@ int neighborSetClearExpire(Neighbor_Set_t *set) {
   return evictionCount;
 }
 
+static void topologySensing(Ranging_Message_t *rangingMessage) {
+  UWB_Address_t neighborAddress = rangingMessage->header.srcAddress;
+  if (!neighborSetHasOneHop(&neighborSet, neighborAddress)) {
+    /* Add current neighbor to one-hop neighbor set. */
+    neighborSetAddOneHopNeighbor(&neighborSet, neighborAddress);
+  }
+  neighborSetUpdateExpirationTime(&neighborSet, neighborAddress);
+
+  /* Infer one-hop and tow-hop neighbors from received ranging message. */
+  uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
+  for (int i = 0; i < bodyUnitCount; i++) {
+    UWB_Address_t twoHopNeighbor = rangingMessage->bodyUnits[i].address;
+    if (twoHopNeighbor != uwbGetAddress()) {
+      /* If it is not one-hop neighbor then it is now my two-hop neighbor. */
+      if (!neighborSetHasOneHop(&neighborSet, twoHopNeighbor)) {
+        neighborSetAddTwoHopNeighbor(&neighborSet, twoHopNeighbor);
+        neighborSetAddRelation(&neighborSet, neighborAddress, twoHopNeighbor);
+      } else {
+        neighborSetUpdateExpirationTime(&neighborSet, twoHopNeighbor);
+      }
+    }
+  }
+}
+
 // TODO: check
 static void neighborSetClearExpireTimerCallback(TimerHandle_t timer) {
   xSemaphoreTake(neighborSet.mu, portMAX_DELAY);
@@ -1028,27 +1052,6 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   neighborRangingTable->period = MAX(neighborRangingTable->period, M2T(RANGING_PERIOD_MIN));
   neighborRangingTable->period = MIN(neighborRangingTable->period, M2T(RANGING_PERIOD_MAX));
   #endif
-
-  if (!neighborSetHasOneHop(&neighborSet, neighborAddress)) {
-    /* Add current neighbor to one-hop neighbor set. */
-    neighborSetAddOneHopNeighbor(&neighborSet, neighborAddress);
-  }
-  neighborSetUpdateExpirationTime(&neighborSet, neighborAddress);
-
-  /* Infer one-hop and tow-hop neighbors from received ranging message. */
-  uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
-  for (int i = 0; i < bodyUnitCount; i++) {
-    UWB_Address_t twoHopNeighbor = rangingMessage->bodyUnits[i].address;
-    if (twoHopNeighbor != uwbGetAddress()) {
-      /* If it is not one-hop neighbor then it is now my two-hop neighbor. */
-      if (!neighborSetHasOneHop(&neighborSet, twoHopNeighbor)) {
-        neighborSetAddTwoHopNeighbor(&neighborSet, twoHopNeighbor);
-        neighborSetAddRelation(&neighborSet, neighborAddress, twoHopNeighbor);
-      } else {
-        neighborSetUpdateExpirationTime(&neighborSet, twoHopNeighbor);
-      }
-    }
-  }
 }
 
 static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
@@ -1152,6 +1155,7 @@ static void uwbRangingRxTask(void *parameters) {
       xSemaphoreTake(neighborSet.mu, portMAX_DELAY);
 
       processRangingMessage(&rxPacketCache);
+      topologySensing(&rxPacketCache.rangingMessage);
 
       xSemaphoreGive(neighborSet.mu);
       xSemaphoreGive(rangingTableSet.mu);
