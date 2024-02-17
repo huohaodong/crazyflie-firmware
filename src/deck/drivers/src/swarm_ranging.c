@@ -586,20 +586,32 @@ void printNeighborSet(Neighbor_Set_t *set) {
               set->twoHop.size,
               set->size
   );
-  DEBUG_PRINT("one hop neighbors = ");
-  for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
-    if (neighborBitSetHas(&set->oneHop, neighborAddress)) {
-      DEBUG_PRINT("%u ", neighborAddress);
+  DEBUG_PRINT("one-hop neighbors = ");
+  for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
+    if (neighborBitSetHas(&set->oneHop, oneHopNeighbor)) {
+      DEBUG_PRINT("%u ", oneHopNeighbor);
     }
   }
   DEBUG_PRINT("\n");
-  DEBUG_PRINT("two hop neighbors = ");
-  for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
-    if (neighborBitSetHas(&set->twoHop, neighborAddress)) {
-      DEBUG_PRINT("%u ", neighborAddress);
+  DEBUG_PRINT("two-hop neighbors = ");
+  for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
+    if (neighborBitSetHas(&set->twoHop, twoHopNeighbor)) {
+      DEBUG_PRINT("%u ", twoHopNeighbor);
     }
   }
   DEBUG_PRINT("\n");
+  for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
+    if (!neighborBitSetHas(&set->twoHop, twoHopNeighbor)) {
+      continue;
+    }
+    DEBUG_PRINT("to two-hop neighbor %u: ", twoHopNeighbor);
+    for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
+      if (neighborSetHasRelation(set, oneHopNeighbor, twoHopNeighbor)) {
+        DEBUG_PRINT("%u ", oneHopNeighbor);
+      }
+    }
+    DEBUG_PRINT("\n");
+  }
 }
 
 void printRangingTable(Ranging_Table_t *table) {
