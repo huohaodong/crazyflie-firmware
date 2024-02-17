@@ -16,12 +16,38 @@
 static TaskHandle_t olsrRxTaskHandle;
 static QueueHandle_t rxQueue;
 static Routing_Table_t *routingTable;
+static Neighbor_Set_t *neighborSet;
+static MPR_Set_t mprSet;
 static TimerHandle_t olsrTcTimer;
 
 static void olsrTcTimerCallback(TimerHandle_t timer) {
   Time_t curTime = xTaskGetTickCount();
-  DEBUG_PRINT("olsrHelloTimerCallback: send tc at %lu.\n", curTime);
+//  DEBUG_PRINT("olsrHelloTimerCallback: send tc at %lu.\n", curTime);
   // TODO: send TC
+}
+
+void mprSetInit(MPR_Set_t *set) {
+  neighborBitSetInit(set);
+}
+
+void mprSetAdd(MPR_Set_t *set, UWB_Address_t neighborAddress) {
+  neighborBitSetAdd(set, neighborAddress);
+}
+
+void mprSetRemove(MPR_Set_t *set, UWB_Address_t neighborAddress) {
+  neighborBitSetRemove(set, neighborAddress);
+}
+
+bool mprSetHas(MPR_Set_t *set, UWB_Address_t neighborAddress) {
+  return neighborBitSetHas(set, neighborAddress);
+}
+
+void mprSetClear(MPR_Set_t *set) {
+  neighborBitSetClear(set);
+}
+
+static void computeMPR(Neighbor_Set_t *set) {
+  // TODO
 }
 
 void olsrRxCallback(void *parameters) {
@@ -51,6 +77,9 @@ static void olsrRxTask(void *parameters) {
 void olsrInit() {
   rxQueue = xQueueCreate(OLSR_RX_QUEUE_SIZE, OLSR_RX_QUEUE_ITEM_SIZE);
   routingTable = getGlobalRoutingTable();
+  neighborSet = getGlobalNeighborSet();
+  mprSetInit(&mprSet);
+
   olsrTcTimer = xTimerCreate("olsrTcTimer",
                              M2T(OLSR_TC_INTERVAL),
                              pdTRUE,
