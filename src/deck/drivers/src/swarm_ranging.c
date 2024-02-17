@@ -42,17 +42,18 @@ static Ranging_Table_t EMPTY_RANGING_TABLE = {
     .period = RANGING_PERIOD,
     .nextExpectedDeliveryTime = M2T(RANGING_PERIOD),
     .expirationTime = M2T(RANGING_TABLE_HOLD_TIME),
+    .distance = -1
 };
 
 int16_t distanceTowards[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
-//  ASSERT(neighborAddress <= RANGING_TABLE_SIZE_MAX);
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
   return distanceTowards[neighborAddress];
 }
 
 void setDistance(UWB_Address_t neighborAddress, int16_t distance) {
-//  ASSERT(neighborAddress <= RANGING_TABLE_SIZE_MAX);
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
   distanceTowards[neighborAddress] = distance;
 }
 
@@ -259,6 +260,7 @@ static int rangingTableSetClearExpire(Ranging_Table_Set_t *set) {
       DEBUG_PRINT("rangingTableSetClearExpire: Clean ranging table for neighbor %u that expire at %lu.\n",
                   rangingTableSet.tables[i].neighborAddress,
                   rangingTableSet.tables[i].expirationTime);
+      setDistance(rangingTableSet.tables[i].neighborAddress, -1);
       rangingTableSet.tables[i] = EMPTY_RANGING_TABLE;
       evictionCount++;
     }
@@ -1117,7 +1119,7 @@ static void uwbRangingTxTask(void *parameters) {
     txPacketCache.header.length = sizeof(UWB_Packet_Header_t) + rangingMessage->header.msgLength;
     uwbSendPacketBlock(&txPacketCache);
 //    printRangingTableSet(&rangingTableSet);
-//    printNeighborSet(&neighborSet);
+    printNeighborSet(&neighborSet);
 
     xSemaphoreGive(neighborSet.mu);
     xSemaphoreGive(rangingTableSet.mu);
