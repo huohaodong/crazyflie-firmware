@@ -494,11 +494,19 @@ void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddres
 }
 
 void neighborSetAddRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to) {
-  // TODO
+  ASSERT(from <= NEIGHBOR_ADDRESS_MAX);
+  ASSERT(to <= NEIGHBOR_ADDRESS_MAX);
+  if (!neighborBitSetHas(&set->twoHopReachSets[to], from)) {
+    neighborBitSetAdd(&set->twoHopReachSets[to], from);
+  }
 }
 
 void neighborSetRemoveRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to) {
-  // TODO
+  ASSERT(from <= NEIGHBOR_ADDRESS_MAX);
+  ASSERT(to <= NEIGHBOR_ADDRESS_MAX);
+  if (neighborBitSetHas(&set->twoHopReachSets[to], from)) {
+    neighborBitSetRemove(&set->twoHopReachSets[to], from);
+  }
 }
 
 void neighborSetRegisterNewNeighborHook(Neighbor_Set_t *set, neighborSetHook hook) {

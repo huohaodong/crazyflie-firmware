@@ -167,7 +167,7 @@ void printRangingTableSet(Ranging_Table_Set_t *set);
 void printRangingMessage(Ranging_Message_t *rangingMessage);
 
 /* Topology Sensing */
-#define NEIGHBOR_ADDRESS_MAX 64
+#define NEIGHBOR_ADDRESS_MAX 32
 #define NEIGHBOR_SET_HOLD_TIME (4 * RANGING_PERIOD_MAX)
 
 typedef struct {
