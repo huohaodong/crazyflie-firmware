@@ -34,7 +34,7 @@
 
 /* Topology Sensing */
 #define NEIGHBOR_ADDRESS_MAX 32
-#define NEIGHBOR_SET_HOLD_TIME (4 * RANGING_PERIOD_MAX)
+#define NEIGHBOR_SET_HOLD_TIME (6 * RANGING_PERIOD_MAX)
 
 typedef short set_index_t;
 

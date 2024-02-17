@@ -404,7 +404,7 @@ void neighborSetInit(Neighbor_Set_t *set) {
 
 bool neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
   ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
-  return neighborBitSetHas(&set->oneHop, neighborAddress) && neighborBitSetHas(&set->twoHop, neighborAddress);
+  return neighborBitSetHas(&set->oneHop, neighborAddress) || neighborBitSetHas(&set->twoHop, neighborAddress);
 }
 
 bool neighborSetHasOneHop(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
@@ -1033,8 +1033,6 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
       }
     }
   }
-
-  printNeighborSet(&neighborSet);
 }
 
 static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
@@ -1055,12 +1053,12 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
       break;
     }
     if (table->latestReceived.timestamp.full) {
-      #ifdef ENABLE_DYNAMIC_RANGING_PERIOD
       /* Only include timestamps with expected delivery time less or equal than current time. */
       if (curTime < table->nextExpectedDeliveryTime) {
         continue;
       }
       table->nextExpectedDeliveryTime = curTime + table->period;
+      #ifdef ENABLE_DYNAMIC_RANGING_PERIOD
       /* Change task delay dynamically, may increase packet loss rate since ranging period now is determined
        * by the minimum expected delivery time.
        */
@@ -1119,6 +1117,7 @@ static void uwbRangingTxTask(void *parameters) {
     txPacketCache.header.length = sizeof(UWB_Packet_Header_t) + rangingMessage->header.msgLength;
     uwbSendPacketBlock(&txPacketCache);
 //    printRangingTableSet(&rangingTableSet);
+//    printNeighborSet(&neighborSet);
 
     xSemaphoreGive(neighborSet.mu);
     xSemaphoreGive(rangingTableSet.mu);
@@ -1178,7 +1177,7 @@ void rangingInit() {
   rxQueue = xQueueCreate(RANGING_RX_QUEUE_SIZE, RANGING_RX_QUEUE_ITEM_SIZE);
   neighborSetInit(&neighborSet);
   neighborSetEvictionTimer = xTimerCreate("neighborSetEvictionTimer",
-                                          M2T(NEIGHBOR_SET_HOLD_TIME / 4),
+                                          M2T(NEIGHBOR_SET_HOLD_TIME / 2),
                                           pdTRUE,
                                           (void *) 0,
                                           neighborSetClearExpireTimerCallback);
