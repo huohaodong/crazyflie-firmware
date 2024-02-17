@@ -32,6 +32,10 @@
 #define Tr_Rr_BUFFER_POOL_SIZE 3
 #define Tf_BUFFER_POOL_SIZE (2 * RANGING_PERIOD_MAX / RANGING_PERIOD_MIN)
 
+/* Topology Sensing */
+#define NEIGHBOR_ADDRESS_MAX 32
+#define NEIGHBOR_SET_HOLD_TIME (4 * RANGING_PERIOD_MAX)
+
 typedef short set_index_t;
 
 /* Timestamp Tuple */
@@ -132,6 +136,30 @@ typedef struct {
 
 typedef void (*RangingTableEventHandler)(Ranging_Table_t *);
 
+typedef struct {
+  uint64_t bits;
+  uint8_t size;
+} Neighbor_Bit_Set_t;
+
+typedef void (*neighborSetHook)(UWB_Address_t);
+
+typedef struct Neighbor_Set_Hook {
+  neighborSetHook hook;
+  struct Neighbor_Set_Hook_Node *next;
+} Neighbor_Set_Hooks_t;
+
+typedef struct {
+  uint8_t size;
+  SemaphoreHandle_t mu;
+  Neighbor_Bit_Set_t oneHop;
+  Neighbor_Bit_Set_t twoHop;
+  /* one hop neighbors can be used to reach the corresponding two hop neighbor */
+  Neighbor_Bit_Set_t twoHopReachSets[NEIGHBOR_ADDRESS_MAX + 1];
+  Neighbor_Set_Hooks_t neighborNewHooks; /* hooks for newly added neighbor which neither one-hop nor two-hop */
+  Neighbor_Set_Hooks_t neighborExpirationHooks;
+  Time_t expirationTime[NEIGHBOR_ADDRESS_MAX + 1];
+} Neighbor_Set_t;
+
 /* Ranging Operations */
 void rangingInit();
 int16_t getDistance(UWB_Address_t neighborAddress);
@@ -161,55 +189,23 @@ void rangingTableSetUpdateTable(Ranging_Table_Set_t *set, Ranging_Table_t table)
 void rangingTableSetRemoveTable(Ranging_Table_Set_t *set, UWB_Address_t neighborAddress);
 Ranging_Table_t rangingTableSetFindTable(Ranging_Table_Set_t *set, UWB_Address_t neighborAddress);
 
-/* Debug Operations */
-void printRangingTable(Ranging_Table_t *rangingTable);
-void printRangingTableSet(Ranging_Table_Set_t *set);
-void printRangingMessage(Ranging_Message_t *rangingMessage);
-
-/* Topology Sensing */
-#define NEIGHBOR_ADDRESS_MAX 32
-#define NEIGHBOR_SET_HOLD_TIME (4 * RANGING_PERIOD_MAX)
-
-typedef struct {
-  uint64_t bits;
-  uint8_t size;
-} Neighbor_Bit_Set_t;
-
-typedef void (*neighborSetHook)(UWB_Address_t);
-
-typedef struct Neighbor_Set_Hook {
-  neighborSetHook hook;
-  struct Neighbor_Set_Hook_Node *next;
-} Neighbor_Set_Hooks_t;
-
-typedef struct {
-  uint8_t size;
-  SemaphoreHandle_t mu;
-  Neighbor_Bit_Set_t oneHop;
-  Neighbor_Bit_Set_t twoHop;
-  /* one hop neighbors can be used to reach the corresponding two hop neighbor */
-  Neighbor_Bit_Set_t twoHopReachSets[NEIGHBOR_ADDRESS_MAX + 1];
-  Neighbor_Set_Hooks_t neighborNewHooks; /* hooks for newly added neighbor which neither one-hop nor two-hop */
-  Neighbor_Set_Hooks_t neighborExpirationHooks;
-  Time_t expirationTime[NEIGHBOR_ADDRESS_MAX + 1];
-} Neighbor_Set_t;
-
 /* Neighbor Bit Set Operations */
 void neighborBitSetInit(Neighbor_Bit_Set_t *bitSet);
 void neighborBitSetAdd(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress);
 void neighborBitSetRemove(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress);
 void neighborBitSetClear(Neighbor_Bit_Set_t *bitSet);
 bool neighborBitSetHas(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress);
-void printNeighborBitSet(Neighbor_Bit_Set_t *bitSet);
 
 /* Neighbor Set Operations */
 Neighbor_Set_t *getGlobalNeighborSet();
 void neighborSetInit(Neighbor_Set_t *set);
 bool neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
+bool neighborSetHasOneHop(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
+bool neighborSetHasTwoHop(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetAddTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
-bool neighborSetRelationHas(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to);
+bool neighborSetHasRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to);
 void neighborSetAddRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to);
 void neighborSetRemoveRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to);
 void neighborSetRegisterNewNeighborHook(Neighbor_Set_t *set, neighborSetHook hook);
@@ -217,6 +213,12 @@ void neighborSetRegisterExpirationHook(Neighbor_Set_t *set, neighborSetHook hook
 void neighborSetHooksInvoke(Neighbor_Set_Hooks_t *hooks, UWB_Address_t neighborAddress);
 void neighborSetUpdateExpirationTime(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 int neighborSetClearExpire(Neighbor_Set_t *set);
+
+/* Debug Operations */
+void printRangingTable(Ranging_Table_t *rangingTable);
+void printRangingTableSet(Ranging_Table_Set_t *set);
+void printRangingMessage(Ranging_Message_t *rangingMessage);
+void printNeighborBitSet(Neighbor_Bit_Set_t *bitSet);
 void printNeighborSet(Neighbor_Set_t *set);
 
 #endif

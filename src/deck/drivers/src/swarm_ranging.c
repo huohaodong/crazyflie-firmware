@@ -44,7 +44,7 @@ static Ranging_Table_t EMPTY_RANGING_TABLE = {
     .expirationTime = M2T(RANGING_TABLE_HOLD_TIME),
 };
 
-int16_t distanceTowards[31] = {[0 ... 30] = -1};
+int16_t distanceTowards[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
 //  ASSERT(neighborAddress <= RANGING_TABLE_SIZE_MAX);
@@ -433,6 +433,16 @@ bool neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
   return neighborBitSetHas(&set->oneHop, neighborAddress) && neighborBitSetHas(&set->twoHop, neighborAddress);
 }
 
+bool neighborSetHasOneHop(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  return neighborBitSetHas(&set->oneHop, neighborAddress);
+}
+
+bool neighborSetHasTwoHop(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  return neighborBitSetHas(&set->twoHop, neighborAddress);
+}
+
 void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
   ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
   bool isNewNeighbor = false;
@@ -486,7 +496,7 @@ void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddres
       neighborBitSetRemove(&set->oneHop, neighborAddress);
       /* Remove related path to two-hop neighbor */
       for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
-        if (neighborSetRelationHas(set, neighborAddress, twoHopNeighbor)) {
+        if (neighborSetHasRelation(set, neighborAddress, twoHopNeighbor)) {
           neighborSetRemoveRelation(set, neighborAddress, twoHopNeighbor);
         }
       }
@@ -501,7 +511,7 @@ void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddres
   set->size = set->oneHop.size + set->twoHop.size;
 }
 
-bool neighborSetRelationHas(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to) {
+bool neighborSetHasRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to) {
   ASSERT(from <= NEIGHBOR_ADDRESS_MAX);
   ASSERT(to <= NEIGHBOR_ADDRESS_MAX);
   return neighborBitSetHas(&set->twoHopReachSets[to], from);
@@ -991,7 +1001,7 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   neighborRangingTable->period = MIN(neighborRangingTable->period, M2T(RANGING_PERIOD_MAX));
   #endif
 
-  if (!neighborBitSetHas(&neighborSet.oneHop, neighborAddress)) {
+  if (!neighborSetHasOneHop(&neighborSet, neighborAddress)) {
     /* Add current neighbor to one-hop neighbor set. */
     neighborSetAddOneHopNeighbor(&neighborSet, neighborAddress);
   }
@@ -1003,7 +1013,7 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
     UWB_Address_t twoHopNeighbor = rangingMessage->bodyUnits[i].address;
     if (twoHopNeighbor != uwbGetAddress()) {
       /* If it is not one-hop neighbor then it is now my two-hop neighbor. */
-      if (!neighborBitSetHas(&neighborSet.oneHop, twoHopNeighbor)) {
+      if (!neighborSetHasOneHop(&neighborSet, twoHopNeighbor)) {
         neighborSetAddTwoHopNeighbor(&neighborSet, twoHopNeighbor);
         neighborSetAddRelation(&neighborSet, neighborAddress, twoHopNeighbor);
       } else {
