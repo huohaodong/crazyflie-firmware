@@ -15,6 +15,7 @@
 
 static TaskHandle_t olsrRxTaskHandle;
 static QueueHandle_t rxQueue;
+static SemaphoreHandle_t olsrSetsMutex;
 static Routing_Table_t *routingTable;
 static Neighbor_Set_t *neighborSet;
 static MPR_Set_t mprSet;
@@ -65,9 +66,13 @@ static void olsrRxTask(void *parameters) {
 
   while (true) {
     if (uwbReceivePacketBlock(UWB_OLSR_MESSAGE, &rxPacketCache)) {
+      xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
       xSemaphoreTake(routingTable->mu, portMAX_DELAY);
+
       // TODO: process TC
+
       xSemaphoreGive(routingTable->mu);
+      xSemaphoreGive(olsrSetsMutex);
     }
     vTaskDelay(M2T(1));
   }
@@ -76,6 +81,7 @@ static void olsrRxTask(void *parameters) {
 
 void olsrInit() {
   rxQueue = xQueueCreate(OLSR_RX_QUEUE_SIZE, OLSR_RX_QUEUE_ITEM_SIZE);
+  olsrSetsMutex = xSemaphoreCreateMutex();
   routingTable = getGlobalRoutingTable();
   neighborSet = getGlobalNeighborSet();
   mprSetInit(&mprSet);
