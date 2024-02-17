@@ -157,6 +157,7 @@ typedef struct {
   Neighbor_Bit_Set_t twoHopReachSets[NEIGHBOR_ADDRESS_MAX + 1];
   Neighbor_Set_Hooks_t neighborNewHooks; /* hooks for newly added neighbor which neither one-hop nor two-hop */
   Neighbor_Set_Hooks_t neighborExpirationHooks;
+  Neighbor_Set_Hooks_t neighborTopologyChangeHooks;
   Time_t expirationTime[NEIGHBOR_ADDRESS_MAX + 1];
 } Neighbor_Set_t;
 
@@ -210,6 +211,7 @@ void neighborSetAddRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address
 void neighborSetRemoveRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to);
 void neighborSetRegisterNewNeighborHook(Neighbor_Set_t *set, neighborSetHook hook);
 void neighborSetRegisterExpirationHook(Neighbor_Set_t *set, neighborSetHook hook);
+void neighborSetRegisterTopologyChangeHook(Neighbor_Set_t *set, neighborSetHook hook);
 void neighborSetHooksInvoke(Neighbor_Set_Hooks_t *hooks, UWB_Address_t neighborAddress);
 void neighborSetUpdateExpirationTime(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 int neighborSetClearExpire(Neighbor_Set_t *set);

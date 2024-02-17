@@ -412,6 +412,8 @@ void neighborSetInit(Neighbor_Set_t *set) {
   set->neighborNewHooks.next = NULL;
   set->neighborExpirationHooks.hook = NULL;
   set->neighborExpirationHooks.next = NULL;
+  set->neighborTopologyChangeHooks.hook = NULL;
+  set->neighborTopologyChangeHooks.next = NULL;
   for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
     set->expirationTime[neighborAddress] = 0;
     neighborBitSetInit(&set->twoHopReachSets[neighborAddress]);
@@ -447,6 +449,7 @@ void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAdd
     if (neighborBitSetHas(&set->twoHop, neighborAddress)) {
       neighborBitSetRemove(&set->twoHop, neighborAddress);
     }
+    neighborSetHooksInvoke(&set->neighborTopologyChangeHooks, neighborAddress);
   }
   set->size = set->oneHop.size + set->twoHop.size;
   if (isNewNeighbor) {
@@ -468,6 +471,7 @@ void neighborSetAddTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAdd
     if (neighborBitSetHas(&set->oneHop, neighborAddress)) {
       neighborBitSetRemove(&set->oneHop, neighborAddress);
     }
+    neighborSetHooksInvoke(&set->neighborTopologyChangeHooks, neighborAddress);
   }
   set->size = set->oneHop.size + set->twoHop.size;
   if (isNewNeighbor) {
@@ -497,6 +501,7 @@ void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddres
     } else {
       ASSERT(0); // impossible
     }
+    neighborSetHooksInvoke(&set->neighborTopologyChangeHooks, neighborAddress);
   }
   set->size = set->oneHop.size + set->twoHop.size;
 }
@@ -537,6 +542,15 @@ void neighborSetRegisterExpirationHook(Neighbor_Set_t *set, neighborSetHook hook
   Neighbor_Set_Hooks_t cur = {
       .hook = hook,
       .next = (struct Neighbor_Set_Hook_Node *) set->neighborExpirationHooks.hook
+  };
+  set->neighborExpirationHooks = cur;
+}
+
+void neighborSetRegisterTopologyChangeHook(Neighbor_Set_t *set, neighborSetHook hook) {
+  ASSERT(hook);
+  Neighbor_Set_Hooks_t cur = {
+      .hook = hook,
+      .next = (struct Neighbor_Set_Hook_Node *) set->neighborTopologyChangeHooks.hook
   };
   set->neighborExpirationHooks = cur;
 }
