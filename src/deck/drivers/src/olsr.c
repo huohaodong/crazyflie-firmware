@@ -1,3 +1,4 @@
+#include <math.h>
 #include "FreeRTOS.h"
 #include "queue.h"
 #include "task.h"
@@ -22,7 +23,26 @@ static MPR_Set_t mprSet;
 static TimerHandle_t olsrTcTimer;
 
 static void computeMPR() {
+  /* 1. Clear previous computed mpr set. */
   mprSetClear(&mprSet);
+  Neighbor_Bit_Set_t coverSet;
+  neighborBitSetInit(&coverSet);
+
+  /* 2. Add all symmetric one-hop neighbors that provide reachability to symmetric two-hop neighbors that are not yet covered. */
+  for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
+    if (!neighborBitSetHas(&coverSet, twoHopNeighbor) && neighborSet->twoHopReachSets[twoHopNeighbor].size == 1) {
+      UWB_Address_t oneHopNeighbor = log2(neighborSet->twoHopReachSets[twoHopNeighbor].bits);
+      mprSetAdd(&mprSet, oneHopNeighbor);
+      neighborBitSetAdd(&coverSet, twoHopNeighbor);
+    }
+    if (coverSet.size == neighborSet->twoHop.size) {
+      break;
+    }
+  }
+
+  /* 3.
+
+
   // TODO: compute
 }
 
