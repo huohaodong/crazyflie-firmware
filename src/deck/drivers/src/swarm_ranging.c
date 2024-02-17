@@ -543,7 +543,7 @@ int neighborSetClearExpire(Neighbor_Set_t *set) {
   Time_t curTime = xTaskGetTickCount();
   int evictionCount = 0;
   for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
-    if (set->expirationTime[neighborAddress] <= curTime) {
+    if (neighborSetHas(set, neighborAddress) && set->expirationTime[neighborAddress] <= curTime) {
       evictionCount++;
       neighborSetRemoveNeighbor(set, neighborAddress);
       DEBUG_PRINT("neighborSetClearExpire: neighbor %u expire at %lu.\n", neighborAddress, curTime);
@@ -1033,6 +1033,8 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
       }
     }
   }
+
+  printNeighborSet(&neighborSet);
 }
 
 static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
