@@ -189,9 +189,6 @@ typedef struct {
   Neighbor_Bit_Set_t twoHop;
   /* one hop neighbors can be used to reach the corresponding two hop neighbor */
   Neighbor_Bit_Set_t twoHopReachSets[NEIGHBOR_ADDRESS_MAX + 1];
-  // TODO: twoHopReachSet oneHopNeighbors that can reach to twoHop neighbor
-  // add: infer from ranging message;
-  // remove: related oneHop neighbor is removed or two hop neighbor itself is removed.
   Neighbor_Set_Hooks_t neighborNewHooks; /* hooks for newly added neighbor which neither one-hop nor two-hop */
   Neighbor_Set_Hooks_t neighborExpirationHooks;
   Time_t expirationTime[NEIGHBOR_ADDRESS_MAX + 1];
@@ -212,6 +209,7 @@ bool neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetAddOneHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetAddTwoHopNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
+bool neighborSetRelationHas(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to);
 void neighborSetAddRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to);
 void neighborSetRemoveRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to);
 void neighborSetRegisterNewNeighborHook(Neighbor_Set_t *set, neighborSetHook hook);

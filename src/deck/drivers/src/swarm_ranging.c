@@ -484,13 +484,27 @@ void neighborSetRemoveNeighbor(Neighbor_Set_t *set, UWB_Address_t neighborAddres
     set->expirationTime[neighborAddress] = 0;
     if (neighborBitSetHas(&set->oneHop, neighborAddress)) {
       neighborBitSetRemove(&set->oneHop, neighborAddress);
+      /* Remove related path to two-hop neighbor */
+      for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
+        if (neighborSetRelationHas(set, neighborAddress, twoHopNeighbor)) {
+          neighborSetRemoveRelation(set, neighborAddress, twoHopNeighbor);
+        }
+      }
     } else if (neighborBitSetHas(&set->twoHop, neighborAddress)) {
       neighborBitSetRemove(&set->twoHop, neighborAddress);
+      /* Clear related two-hop reach set */
+      neighborBitSetClear(&set->twoHopReachSets[neighborAddress]);
     } else {
       ASSERT(0); // impossible
     }
   }
   set->size = set->oneHop.size + set->twoHop.size;
+}
+
+bool neighborSetRelationHas(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to) {
+  ASSERT(from <= NEIGHBOR_ADDRESS_MAX);
+  ASSERT(to <= NEIGHBOR_ADDRESS_MAX);
+  return neighborBitSetHas(&set->twoHopReachSets[to], from);
 }
 
 void neighborSetAddRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address_t to) {
@@ -986,13 +1000,14 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   /* Infer one-hop and tow-hop neighbors from received ranging message. */
   uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
   for (int i = 0; i < bodyUnitCount; i++) {
-    UWB_Address_t curNeighborAddress = rangingMessage->bodyUnits[i].address;
-    if (curNeighborAddress != uwbGetAddress()) {
+    UWB_Address_t twoHopNeighbor = rangingMessage->bodyUnits[i].address;
+    if (twoHopNeighbor != uwbGetAddress()) {
       /* If it is not one-hop neighbor then it is now my two-hop neighbor. */
-      if (!neighborBitSetHas(&neighborSet.oneHop, curNeighborAddress)) {
-        neighborSetAddTwoHopNeighbor(&neighborSet, curNeighborAddress);
+      if (!neighborBitSetHas(&neighborSet.oneHop, twoHopNeighbor)) {
+        neighborSetAddTwoHopNeighbor(&neighborSet, twoHopNeighbor);
+        neighborSetAddRelation(&neighborSet, neighborAddress, twoHopNeighbor);
       } else {
-        neighborSetUpdateExpirationTime(&neighborSet, curNeighborAddress);
+        neighborSetUpdateExpirationTime(&neighborSet, twoHopNeighbor);
       }
     }
   }
