@@ -89,14 +89,11 @@ static void olsrTcTimerCallback(TimerHandle_t timer) {
 
 // TODO: check invocation
 void olsrNeighborTopologyChangeHook(UWB_Address_t neighborAddress) {
-  if (mprSetHas(&mprSet, neighborAddress)) {
-    xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
-    xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
-    computeMPR();
-    printMPRSet(&mprSet);
-    xSemaphoreGive(neighborSet->mu);
-    xSemaphoreGive(olsrSetsMutex);
-  }
+  xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
+  xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
+  computeMPR();
+  xSemaphoreGive(neighborSet->mu);
+  xSemaphoreGive(olsrSetsMutex);
 }
 
 void mprSetInit(MPR_Set_t *set) {
