@@ -30,20 +30,57 @@ static void computeMPR() {
 
   /* 2. Add all symmetric one-hop neighbors that provide reachability to symmetric two-hop neighbors that are not yet covered. */
   for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
-    if (!neighborBitSetHas(&coverSet, twoHopNeighbor) && neighborSet->twoHopReachSets[twoHopNeighbor].size == 1) {
-      UWB_Address_t oneHopNeighbor = log2(neighborSet->twoHopReachSets[twoHopNeighbor].bits);
-      mprSetAdd(&mprSet, oneHopNeighbor);
-      neighborBitSetAdd(&coverSet, twoHopNeighbor);
-    }
     if (coverSet.size == neighborSet->twoHop.size) {
       break;
     }
+    if (!neighborBitSetHas(&coverSet, twoHopNeighbor) && neighborSet->twoHopReachSets[twoHopNeighbor].size == 1) {
+      UWB_Address_t onlyOneHopNeighbor = log2(neighborSet->twoHopReachSets[twoHopNeighbor].bits);
+      mprSetAdd(&mprSet, onlyOneHopNeighbor);
+      neighborBitSetAdd(&coverSet, twoHopNeighbor);
+    }
   }
 
-  /* 3.
+  /* 3. Add all symmetric one-hop neighbors that covers most uncovered two-hop neighbors. */
+  for (UWB_Address_t round = 0; round <= NEIGHBOR_ADDRESS_MAX; round++) {
+    if (coverSet.size == neighborSet->twoHop.size) {
+      break;
+    }
+    /* 3.1 Collect reach counts of one-hop neighbors according to the number of uncovered two-hop neighbors. */
+    uint8_t reachCount[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+    for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
+      if (!neighborBitSetHas(&coverSet, twoHopNeighbor)) {
+        for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
+          if (neighborSetHasRelation(neighborSet, oneHopNeighbor, twoHopNeighbor)) {
+            reachCount[oneHopNeighbor]++;
+          }
+        }
+      }
+    }
+    /* 3.2 Find the one-hop neighbor that covers most uncovered two-hop neighbors in this round. */
+    UWB_Address_t mostOneHopNeighbor = 0;
+    uint8_t mostCount = 0;
+    for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
+      if (reachCount[oneHopNeighbor] > mostCount) {
+        mostOneHopNeighbor = oneHopNeighbor;
+        mostCount = reachCount[oneHopNeighbor];
+      }
+    }
+    /* 3.3 Add this one-hop neighbor to mpr set and then update cover set. */
+    mprSetAdd(&mprSet, mostOneHopNeighbor);
+    for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
+      if (!neighborBitSetHas(&coverSet, twoHopNeighbor)
+          && neighborSetHasRelation(neighborSet, mostOneHopNeighbor, twoHopNeighbor)) {
+        neighborBitSetAdd(&coverSet, twoHopNeighbor);
+      }
+    }
+  }
 
-
-  // TODO: compute
+  if (coverSet.size == neighborSet->twoHop.size) {
+    DEBUG_PRINT("computeMPR: covered all two-hop neighbors.\n");
+  } else {
+    DEBUG_PRINT("computeMPR: cannot covered all two-hop neighbors.\n");
+  }
+  printMPRSet(&mprSet);
 }
 
 static void olsrTcTimerCallback(TimerHandle_t timer) {
