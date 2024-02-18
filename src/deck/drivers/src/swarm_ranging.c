@@ -10,6 +10,8 @@
 #include "log.h"
 #include "adhocdeck.h"
 #include "swarm_ranging.h"
+#include "routing.h"
+#include "olsr.h"
 #include "timers.h"
 
 #ifndef RANGING_DEBUG_ENABLE
@@ -594,6 +596,19 @@ static void topologySensing(Ranging_Message_t *rangingMessage) {
   /* Infer one-hop and tow-hop neighbors from received ranging message. */
   uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
   for (int i = 0; i < bodyUnitCount; i++) {
+    #ifdef ROUTING_OLSR_ENABLE
+    if (rangingMessage->bodyUnits[i].address == uwbGetAddress()) {
+      /* If been selected as MPR, add neighbor to mpr selector set. */
+      if (rangingMessage->bodyUnits[i].flags.MPR) {
+        if (!mprSelectorSetHas(getGlobalMPRSelectorSet(), neighborAddress)) {
+          mprSelectorSetAdd(getGlobalMPRSelectorSet(), neighborAddress);
+        }
+        mprSelectorSetUpdateExpirationTime(getGlobalMPRSelectorSet(), neighborAddress);
+      } else {
+        mprSelectorSetRemove(getGlobalMPRSelectorSet(), neighborAddress);
+      }
+    }
+    #endif
     UWB_Address_t twoHopNeighbor = rangingMessage->bodyUnits[i].address;
     if (twoHopNeighbor != uwbGetAddress() && !neighborSetHasOneHop(&neighborSet, twoHopNeighbor)) {
       /* If it is not one-hop neighbor then it is now my two-hop neighbor, if new add it to neighbor set. */
@@ -1105,6 +1120,13 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
        * waiting to be handled.
        */
       rangingMessage->bodyUnits[bodyUnitNumber].timestamp = table->latestReceived;
+      #ifdef ROUTING_OLSR_ENABLE
+      if (mprSetHas(getGlobalMPRSet(), table->neighborAddress)) {
+        rangingMessage->bodyUnits[bodyUnitNumber].flags.MPR = true;
+      } else {
+        rangingMessage->bodyUnits[bodyUnitNumber].flags.MPR = false;
+      }
+      #endif
       bodyUnitNumber++;
       rangingMessage->header.filter |= 1 << (table->neighborAddress % 16);
       rangingTableOnEvent(table, RANGING_EVENT_TX_Tf);

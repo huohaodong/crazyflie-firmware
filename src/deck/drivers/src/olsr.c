@@ -121,6 +121,10 @@ void olsrNeighborTopologyChangeHook(UWB_Address_t neighborAddress) {
   xSemaphoreGive(olsrSetsMutex);
 }
 
+MPR_Set_t *getGlobalMPRSet() {
+  return &mprSet;
+}
+
 void mprSetInit(MPR_Set_t *set) {
   neighborBitSetInit(set);
 }
@@ -141,6 +145,10 @@ void mprSetClear(MPR_Set_t *set) {
   neighborBitSetClear(set);
 }
 
+MPR_Selector_Set_t *getGlobalMPRSelectorSet() {
+  return &mprSelectorSet;
+}
+
 void mprSelectorSetInit(MPR_Selector_Set_t *set) {
   neighborBitSetInit(&set->mprSelectors);
   for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
@@ -157,11 +165,17 @@ void mprSelectorSetAdd(MPR_Selector_Set_t *set, UWB_Address_t neighborAddress) {
 void mprSelectorSetRemove(MPR_Selector_Set_t *set, UWB_Address_t neighborAddress) {
   if (neighborBitSetHas(&set->mprSelectors, neighborAddress)) {
     neighborBitSetRemove(&set->mprSelectors, neighborAddress);
+    set->expirationTime[neighborAddress] = 0;
   }
 }
 
 bool mprSelectorSetHas(MPR_Selector_Set_t *set, UWB_Address_t neighborAddress) {
   return neighborBitSetHas(&set->mprSelectors, neighborAddress);
+}
+
+void mprSelectorSetUpdateExpirationTime(MPR_Selector_Set_t *set, UWB_Address_t neighborAddress) {
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  set->expirationTime[neighborAddress] = xTaskGetTickCount() + M2T(OLSR_MPR_SELECTOR_SET_HOLD_TIME);
 }
 
 int mprSelectorSetClearExpire(MPR_Selector_Set_t *set) {

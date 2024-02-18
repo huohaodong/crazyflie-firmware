@@ -25,8 +25,8 @@
 
 /* Ranging Struct Constants */
 #define MAX_Tr_UNIT 3
-#define MAX_BODY_UNIT 7
-//#define MAX_BODY_UNIT (UWB_FRAME_LEN_MAX - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t) // 1 ~ 83
+//#define MAX_BODY_UNIT 7
+#define MAX_BODY_UNIT ((UWB_FRAME_LEN_MAX - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t))
 #define RANGING_TABLE_SIZE_MAX 10 // default up to 10 one-hop neighbors
 #define RANGING_TABLE_HOLD_TIME (6 * RANGING_PERIOD_MAX)
 #define Tr_Rr_BUFFER_POOL_SIZE 3
@@ -46,9 +46,13 @@ typedef struct {
 
 /* Body Unit */
 typedef struct {
+  struct {
+    uint8_t MPR: 1;
+    uint8_t RESERVED: 7;
+  } flags; // 1 byte
   uint16_t address; // 2 byte
   Timestamp_Tuple_t timestamp; // 10 byte
-} __attribute__((packed)) Body_Unit_t; // 12 byte
+} __attribute__((packed)) Body_Unit_t; // 13 byte
 
 /* Ranging Message Header*/
 typedef struct {
@@ -63,8 +67,8 @@ typedef struct {
 /* Ranging Message */
 typedef struct {
   Ranging_Message_Header_t header; // 18 byte
-  Body_Unit_t bodyUnits[MAX_BODY_UNIT]; // 12 byte * MAX_NEIGHBOR_SIZE
-} __attribute__((packed)) Ranging_Message_t; // 20 + 12 byte * MAX_NEIGHBOR_SIZE
+  Body_Unit_t bodyUnits[MAX_BODY_UNIT]; // 13 byte * MAX_BODY_UNIT
+} __attribute__((packed)) Ranging_Message_t; // 18 + 13 byte * MAX_BODY_UNIT
 
 /* Ranging Message With RX Timestamp, used in RX Queue */
 typedef struct {
