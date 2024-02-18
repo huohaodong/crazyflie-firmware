@@ -605,7 +605,9 @@ static void topologySensing(Ranging_Message_t *rangingMessage) {
         }
         mprSelectorSetUpdateExpirationTime(getGlobalMPRSelectorSet(), neighborAddress);
       } else {
-        mprSelectorSetRemove(getGlobalMPRSelectorSet(), neighborAddress);
+        if (mprSelectorSetHas(getGlobalMPRSelectorSet(), neighborAddress)) {
+          mprSelectorSetRemove(getGlobalMPRSelectorSet(), neighborAddress);
+        }
       }
     }
     #endif
