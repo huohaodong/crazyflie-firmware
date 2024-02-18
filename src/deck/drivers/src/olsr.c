@@ -20,6 +20,8 @@ static SemaphoreHandle_t olsrSetsMutex;
 static Routing_Table_t *routingTable;
 static Neighbor_Set_t *neighborSet;
 static MPR_Set_t mprSet;
+static MPR_Selector_Set_t mprSelectorSet;
+static TimerHandle_t mprSelectorSetEvictionTimer;
 static TimerHandle_t olsrTcTimer;
 
 static void computeMPR() {
@@ -139,6 +141,58 @@ void mprSetClear(MPR_Set_t *set) {
   neighborBitSetClear(set);
 }
 
+void mprSelectorSetInit(MPR_Selector_Set_t *set) {
+  neighborBitSetInit(&set->mprSelectors);
+  for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
+    set->expirationTime[neighborAddress] = 0;
+  }
+}
+
+void mprSelectorSetAdd(MPR_Selector_Set_t *set, UWB_Address_t neighborAddress) {
+  if (!neighborBitSetHas(&set->mprSelectors, neighborAddress)) {
+    neighborBitSetAdd(&set->mprSelectors, neighborAddress);
+  }
+}
+
+void mprSelectorSetRemove(MPR_Selector_Set_t *set, UWB_Address_t neighborAddress) {
+  if (neighborBitSetHas(&set->mprSelectors, neighborAddress)) {
+    neighborBitSetRemove(&set->mprSelectors, neighborAddress);
+  }
+}
+
+bool mprSelectorSetHas(MPR_Selector_Set_t *set, UWB_Address_t neighborAddress) {
+  return neighborBitSetHas(&set->mprSelectors, neighborAddress);
+}
+
+int mprSelectorSetClearExpire(MPR_Selector_Set_t *set) {
+  Time_t curTime = xTaskGetTickCount();
+  int evictionCount = 0;
+  for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
+    if (mprSelectorSetHas(set, neighborAddress) && set->expirationTime[neighborAddress] <= curTime) {
+      evictionCount++;
+      mprSelectorSetRemove(set, neighborAddress);
+      DEBUG_PRINT("mprSelectorSetClearExpire: mpr selector %u expire at %lu.\n", neighborAddress, curTime);
+    }
+  }
+  return evictionCount;
+}
+
+static void mprSelectorSetClearExpireTimerCallback(TimerHandle_t timer) {
+  xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
+
+  Time_t curTime = xTaskGetTickCount();
+  DEBUG_PRINT("mprSelectorSetClearExpireTimerCallback: Trigger expiration timer at %lu.\n", curTime);
+
+  int evictionCount = mprSelectorSetClearExpire(&mprSelectorSet);
+  if (evictionCount > 0) {
+    DEBUG_PRINT("mprSelectorSetClearExpireTimerCallback: Evict total %d mpr selectors.\n", evictionCount);
+  } else {
+    DEBUG_PRINT("mprSelectorSetClearExpireTimerCallback: Evict none.\n");
+  }
+
+  xSemaphoreGive(olsrSetsMutex);
+}
+
 void printMPRSet(MPR_Set_t *set) {
   DEBUG_PRINT("%u has %u mpr neighbors = ", uwbGetAddress(), set->size);
   for (int neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
@@ -186,6 +240,13 @@ void olsrInit() {
   neighborSet = getGlobalNeighborSet();
   neighborSetRegisterTopologyChangeHook(neighborSet, olsrNeighborTopologyChangeHook);
   mprSetInit(&mprSet);
+  mprSelectorSetInit(&mprSelectorSet);
+  mprSelectorSetEvictionTimer = xTimerCreate("mprSelectorSetEvictionTimer",
+                                             M2T(OLSR_MPR_SELECTOR_SET_HOLD_TIME / 2),
+                                             pdTRUE,
+                                             (void *) 0,
+                                             mprSelectorSetClearExpireTimerCallback);
+  xTimerStart(mprSelectorSetEvictionTimer, M2T(0));
   olsrTcTimer = xTimerCreate("olsrTcTimer",
                              M2T(OLSR_TC_INTERVAL),
                              pdTRUE,

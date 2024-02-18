@@ -609,7 +609,6 @@ static void topologySensing(Ranging_Message_t *rangingMessage) {
   }
 }
 
-// TODO: check
 static void neighborSetClearExpireTimerCallback(TimerHandle_t timer) {
   xSemaphoreTake(neighborSet.mu, portMAX_DELAY);
 
