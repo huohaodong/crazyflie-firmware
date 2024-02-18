@@ -40,9 +40,9 @@ static void computeMPR() {
       neighborBitSetAdd(&coverSet, twoHopNeighbor);
     }
   }
-  uint8_t remainUncovered = neighborSet->twoHop.size - coverSet.size;
+  uint8_t remainUncoveredCount = neighborSet->twoHop.size - coverSet.size;
   /* 3. Add all symmetric one-hop neighbors that covers most uncovered two-hop neighbors. */
-  for (UWB_Address_t round = 0; round <= remainUncovered; round++) {
+  for (UWB_Address_t round = 0; round <= remainUncoveredCount; round++) {
     if (coverSet.size == neighborSet->twoHop.size) {
       break;
     }

@@ -595,16 +595,16 @@ static void topologySensing(Ranging_Message_t *rangingMessage) {
   uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
   for (int i = 0; i < bodyUnitCount; i++) {
     UWB_Address_t twoHopNeighbor = rangingMessage->bodyUnits[i].address;
-    if (twoHopNeighbor != uwbGetAddress()) {
+    if (twoHopNeighbor != uwbGetAddress() && !neighborSetHasOneHop(&neighborSet, twoHopNeighbor)) {
       /* If it is not one-hop neighbor then it is now my two-hop neighbor, if new add it to neighbor set. */
-      if (!neighborSetHasOneHop(&neighborSet, twoHopNeighbor)) {
-        if (!neighborSetHasTwoHop(&neighborSet, twoHopNeighbor)) {
-          neighborSetAddTwoHopNeighbor(&neighborSet, twoHopNeighbor);
-          neighborSetAddRelation(&neighborSet, neighborAddress, twoHopNeighbor);
-        } else {
-          neighborSetUpdateExpirationTime(&neighborSet, twoHopNeighbor);
-        }
+      if (!neighborSetHasTwoHop(&neighborSet, twoHopNeighbor)) {
+        neighborSetAddTwoHopNeighbor(&neighborSet, twoHopNeighbor);
+        neighborSetAddRelation(&neighborSet, neighborAddress, twoHopNeighbor);
       }
+      if (!neighborSetHasRelation(&neighborSet, neighborAddress, twoHopNeighbor)) {
+        neighborSetAddRelation(&neighborSet, neighborAddress, twoHopNeighbor);
+      }
+      neighborSetUpdateExpirationTime(&neighborSet, twoHopNeighbor);
     }
   }
 }
