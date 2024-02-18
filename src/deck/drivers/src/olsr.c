@@ -76,9 +76,11 @@ static void computeMPR() {
   }
 
   if (coverSet.size == neighborSet->twoHop.size) {
-    DEBUG_PRINT("computeMPR: covered all two-hop neighbors.\n");
+    DEBUG_PRINT("computeMPR: covered all %u two-hop neighbors.\n", neighborSet->twoHop.size);
   } else {
-    DEBUG_PRINT("computeMPR: cannot covered all two-hop neighbors.\n");
+    DEBUG_PRINT("computeMPR: cannot covered all %u two-hop neighbors, now covers %u.\n",
+                neighborSet->twoHop.size,
+                coverSet.size);
   }
   printMPRSet(&mprSet);
 }
