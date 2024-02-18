@@ -195,8 +195,18 @@ static void mprSelectorSetClearExpireTimerCallback(TimerHandle_t timer) {
 
 void printMPRSet(MPR_Set_t *set) {
   DEBUG_PRINT("%u has %u mpr neighbors = ", uwbGetAddress(), set->size);
-  for (int neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
+  for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
     if (mprSetHas(set, neighborAddress)) {
+      DEBUG_PRINT("%u ", neighborAddress);
+    }
+  }
+  DEBUG_PRINT("\n");
+}
+
+void printMPRSelectorSet(MPR_Selector_Set_t *set) {
+  DEBUG_PRINT("%u has %u mpr selectors = ", uwbGetAddress(), set->mprSelectors.size);
+  for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
+    if (mprSelectorSetHas(set, neighborAddress)) {
       DEBUG_PRINT("%u ", neighborAddress);
     }
   }
