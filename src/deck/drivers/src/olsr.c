@@ -23,7 +23,6 @@ static MPR_Set_t mprSet;
 static TimerHandle_t olsrTcTimer;
 
 static void computeMPR() {
-  DEBUG_PRINT("computeMPR.\n");
   /* 1. Clear previous computed mpr set. */
   mprSetClear(&mprSet);
   Neighbor_Bit_Set_t coverSet;
@@ -35,14 +34,15 @@ static void computeMPR() {
       break;
     }
     if (!neighborBitSetHas(&coverSet, twoHopNeighbor) && neighborSet->twoHopReachSets[twoHopNeighbor].size == 1) {
-      UWB_Address_t onlyOneHopNeighbor = log2(neighborSet->twoHopReachSets[twoHopNeighbor].bits);
+      UWB_Address_t onlyOneHopNeighbor = (UWB_Address_t) log2(neighborSet->twoHopReachSets[twoHopNeighbor].bits);
+      DEBUG_PRINT("computeMPR: onlyOneHopNeighbor to %u = %u.\n", twoHopNeighbor, onlyOneHopNeighbor);
       mprSetAdd(&mprSet, onlyOneHopNeighbor);
       neighborBitSetAdd(&coverSet, twoHopNeighbor);
     }
   }
-
+  uint8_t remainUncovered = neighborSet->twoHop.size - coverSet.size;
   /* 3. Add all symmetric one-hop neighbors that covers most uncovered two-hop neighbors. */
-  for (UWB_Address_t round = 0; round <= NEIGHBOR_ADDRESS_MAX; round++) {
+  for (UWB_Address_t round = 0; round <= remainUncovered; round++) {
     if (coverSet.size == neighborSet->twoHop.size) {
       break;
     }
@@ -83,11 +83,17 @@ static void computeMPR() {
                 neighborSet->twoHop.size,
                 coverSet.size);
   }
-  printMPRSet(&mprSet);
 }
 
 static void olsrTcTimerCallback(TimerHandle_t timer) {
   // TODO: send TC
+  xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
+  xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
+  computeMPR();
+  printNeighborSet(neighborSet);
+  printMPRSet(&mprSet);
+  xSemaphoreGive(neighborSet->mu);
+  xSemaphoreGive(olsrSetsMutex);
 }
 
 // TODO: check invocation

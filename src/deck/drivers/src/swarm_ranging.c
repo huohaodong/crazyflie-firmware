@@ -596,12 +596,14 @@ static void topologySensing(Ranging_Message_t *rangingMessage) {
   for (int i = 0; i < bodyUnitCount; i++) {
     UWB_Address_t twoHopNeighbor = rangingMessage->bodyUnits[i].address;
     if (twoHopNeighbor != uwbGetAddress()) {
-      /* If it is not one-hop neighbor then it is now my two-hop neighbor. */
+      /* If it is not one-hop neighbor then it is now my two-hop neighbor, if new add it to neighbor set. */
       if (!neighborSetHasOneHop(&neighborSet, twoHopNeighbor)) {
-        neighborSetAddTwoHopNeighbor(&neighborSet, twoHopNeighbor);
-        neighborSetAddRelation(&neighborSet, neighborAddress, twoHopNeighbor);
-      } else {
-        neighborSetUpdateExpirationTime(&neighborSet, twoHopNeighbor);
+        if (!neighborSetHasTwoHop(&neighborSet, twoHopNeighbor)) {
+          neighborSetAddTwoHopNeighbor(&neighborSet, twoHopNeighbor);
+          neighborSetAddRelation(&neighborSet, neighborAddress, twoHopNeighbor);
+        } else {
+          neighborSetUpdateExpirationTime(&neighborSet, twoHopNeighbor);
+        }
       }
     }
   }
@@ -1150,7 +1152,7 @@ static void uwbRangingTxTask(void *parameters) {
     txPacketCache.header.length = sizeof(UWB_Packet_Header_t) + rangingMessage->header.msgLength;
     uwbSendPacketBlock(&txPacketCache);
 //    printRangingTableSet(&rangingTableSet);
-    printNeighborSet(&neighborSet);
+//    printNeighborSet(&neighborSet);
 
     xSemaphoreGive(neighborSet.mu);
     xSemaphoreGive(rangingTableSet.mu);
