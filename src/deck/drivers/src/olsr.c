@@ -33,6 +33,9 @@ static void computeMPR() {
     if (coverSet.size == neighborSet->twoHop.size) {
       break;
     }
+    if (!neighborSetHasTwoHop(neighborSet, twoHopNeighbor)) {
+      continue;
+    }
     if (!neighborBitSetHas(&coverSet, twoHopNeighbor) && neighborSet->twoHopReachSets[twoHopNeighbor].size == 1) {
       UWB_Address_t onlyOneHopNeighbor = (UWB_Address_t) log2(neighborSet->twoHopReachSets[twoHopNeighbor].bits);
       DEBUG_PRINT("computeMPR: onlyOneHopNeighbor to %u = %u.\n", twoHopNeighbor, onlyOneHopNeighbor);
@@ -49,8 +52,14 @@ static void computeMPR() {
     /* 3.1 Collect reach counts of one-hop neighbors according to the number of uncovered two-hop neighbors. */
     uint8_t reachCount[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
     for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
+      if (!neighborSetHasTwoHop(neighborSet, twoHopNeighbor)) {
+        continue;
+      }
       if (!neighborBitSetHas(&coverSet, twoHopNeighbor)) {
         for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
+          if (!neighborSetHasOneHop(neighborSet, oneHopNeighbor)) {
+            continue;
+          }
           if (neighborSetHasRelation(neighborSet, oneHopNeighbor, twoHopNeighbor)) {
             reachCount[oneHopNeighbor]++;
           }
@@ -61,6 +70,9 @@ static void computeMPR() {
     UWB_Address_t mostOneHopNeighbor = 0;
     uint8_t mostCount = 0;
     for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
+      if (!neighborSetHasOneHop(neighborSet, oneHopNeighbor)) {
+        continue;
+      }
       if (reachCount[oneHopNeighbor] > mostCount) {
         mostOneHopNeighbor = oneHopNeighbor;
         mostCount = reachCount[oneHopNeighbor];
@@ -69,6 +81,9 @@ static void computeMPR() {
     /* 3.3 Add this one-hop neighbor to mpr set and then update cover set. */
     mprSetAdd(&mprSet, mostOneHopNeighbor);
     for (UWB_Address_t twoHopNeighbor = 0; twoHopNeighbor <= NEIGHBOR_ADDRESS_MAX; twoHopNeighbor++) {
+      if (!neighborSetHasTwoHop(neighborSet, twoHopNeighbor)) {
+        continue;
+      }
       if (!neighborBitSetHas(&coverSet, twoHopNeighbor)
           && neighborSetHasRelation(neighborSet, mostOneHopNeighbor, twoHopNeighbor)) {
         neighborBitSetAdd(&coverSet, twoHopNeighbor);
@@ -78,10 +93,12 @@ static void computeMPR() {
 
   if (coverSet.size == neighborSet->twoHop.size) {
     DEBUG_PRINT("computeMPR: covered all %u two-hop neighbors.\n", neighborSet->twoHop.size);
+    printNeighborBitSet(&coverSet);
   } else {
     DEBUG_PRINT("computeMPR: cannot covered all %u two-hop neighbors, now covers %u.\n",
                 neighborSet->twoHop.size,
                 coverSet.size);
+    printNeighborBitSet(&coverSet);
   }
 }
 
