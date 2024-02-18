@@ -91,7 +91,7 @@ static void computeMPR() {
     }
   }
 
-  if (coverSet.size == neighborSet->twoHop.size) {
+  if (coverSet.size == neighborSet->twoHop.size && coverSet.bits == neighborSet->twoHop.bits) {
     DEBUG_PRINT("computeMPR: covered all %u two-hop neighbors.\n", neighborSet->twoHop.size);
     printNeighborBitSet(&coverSet);
   } else {
