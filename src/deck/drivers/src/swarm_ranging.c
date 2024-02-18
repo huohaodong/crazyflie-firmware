@@ -552,7 +552,7 @@ void neighborSetRegisterTopologyChangeHook(Neighbor_Set_t *set, neighborSetHook 
       .hook = hook,
       .next = (struct Neighbor_Set_Hook_Node *) set->neighborTopologyChangeHooks.hook
   };
-  set->neighborExpirationHooks = cur;
+  set->neighborTopologyChangeHooks = cur;
 }
 
 void neighborSetHooksInvoke(Neighbor_Set_Hooks_t *hooks, UWB_Address_t neighborAddress) {
@@ -1150,7 +1150,7 @@ static void uwbRangingTxTask(void *parameters) {
     txPacketCache.header.length = sizeof(UWB_Packet_Header_t) + rangingMessage->header.msgLength;
     uwbSendPacketBlock(&txPacketCache);
 //    printRangingTableSet(&rangingTableSet);
-//    printNeighborSet(&neighborSet);
+    printNeighborSet(&neighborSet);
 
     xSemaphoreGive(neighborSet.mu);
     xSemaphoreGive(rangingTableSet.mu);

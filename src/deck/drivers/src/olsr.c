@@ -23,6 +23,7 @@ static MPR_Set_t mprSet;
 static TimerHandle_t olsrTcTimer;
 
 static void computeMPR() {
+  DEBUG_PRINT("computeMPR.\n");
   /* 1. Clear previous computed mpr set. */
   mprSetClear(&mprSet);
   Neighbor_Bit_Set_t coverSet;
@@ -92,9 +93,7 @@ static void olsrTcTimerCallback(TimerHandle_t timer) {
 // TODO: check invocation
 void olsrNeighborTopologyChangeHook(UWB_Address_t neighborAddress) {
   xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
-  xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
   computeMPR();
-  xSemaphoreGive(neighborSet->mu);
   xSemaphoreGive(olsrSetsMutex);
 }
 
