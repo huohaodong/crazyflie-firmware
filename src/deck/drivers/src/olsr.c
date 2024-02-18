@@ -106,7 +106,6 @@ static void olsrTcTimerCallback(TimerHandle_t timer) {
   // TODO: send TC
   xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
   xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
-  computeMPR();
   printNeighborSet(neighborSet);
   printMPRSet(&mprSet);
   xSemaphoreGive(neighborSet->mu);
