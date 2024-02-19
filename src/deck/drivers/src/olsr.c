@@ -273,9 +273,8 @@ static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *tcMs
 
   tcMsg->header.hopCount++;
   tcMsg->header.ttl--;
-  /* Forward this tc tcMsg if TTL > 0 if am the MPR of this one-hop neighbor  */
+  /* Forward this tc tcMsg if TTL > 0 if am the MPR of this one-hop neighbor */
   if (tcMsg->header.ttl > 0 && mprSelectorSetHas(&mprSelectorSet, neighborAddress)) {
-    // TODO: check
     DEBUG_PRINT("olsrProcessTC: %u forward tc message from mpr selector %u, origin = %u, ttl = %u, hopCount = %u.\n",
                 uwbGetAddress(),
                 neighborAddress,
