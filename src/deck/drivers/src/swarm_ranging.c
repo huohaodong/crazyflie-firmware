@@ -292,7 +292,7 @@ static void rangingTableSetClearExpireTimerCallback(TimerHandle_t timer) {
   xSemaphoreTake(rangingTableSet.mu, portMAX_DELAY);
 
   Time_t curTime = xTaskGetTickCount();
-  DEBUG_PRINT("rangingTableClearExpireTimerCallback: Trigger expiration timer at %lu.\n", curTime);
+  DEBUG_PRINT("rangingTableSetClearExpireTimerCallback: Trigger expiration timer at %lu.\n", curTime);
 
   int evictionCount = rangingTableSetClearExpire(&rangingTableSet);
   if (evictionCount > 0) {
