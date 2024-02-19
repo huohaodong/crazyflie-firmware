@@ -26,7 +26,8 @@ static MPR_Set_t mprSet;
 static MPR_Selector_Set_t mprSelectorSet;
 static TimerHandle_t mprSelectorSetEvictionTimer;
 static TimerHandle_t olsrTcTimer;
-static uint16_t olsrTcSeqNumber = 0;
+static uint16_t olsrTcMsgSeqNumber = 0;
+static uint16_t olsrTcANSN = 0; /* Advertised Neighbor Sequence Number */
 static uint16_t lastReceivedTcSeqNumbers[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
 static uint16_t olsrPacketSeqNumber = 0;
 
@@ -40,12 +41,12 @@ static void olsrUpdateDupTc(UWB_Address_t originAddress, uint16_t seqNumber) {
   lastReceivedTcSeqNumbers[originAddress] = MAX(lastReceivedTcSeqNumbers[originAddress], seqNumber);
 }
 
-static uint16_t getNextTcSeqNumber() {
-  return olsrTcSeqNumber++;
-}
-
 static uint16_t getNextPacketSeqNumber() {
   return olsrPacketSeqNumber++;
+}
+
+static uint16_t getNextTcSeqNumber() {
+  return olsrTcMsgSeqNumber++;
 }
 
 static void computeMPR() {
@@ -128,13 +129,107 @@ static void computeMPR() {
   }
 }
 
+static void olsrSendTc() {
+  UWB_Packet_t packet = {
+      .header.type = UWB_OLSR_MESSAGE,
+      .header.srcAddress = uwbGetAddress(),
+      .header.destAddress = UWB_DEST_ANY,
+      .header.length = sizeof(UWB_Packet_Header_t)
+  };
+  OLSR_Packet_t *olsrPacket = (OLSR_Packet_t *) &packet.payload;
+  OLSR_TC_Message_t *tcMsg = (OLSR_TC_Message_t *) &olsrPacket->payload;
+  uint8_t mprSelectorToSend = mprSelectorSet.mprSelectors.size;
+  uint8_t round = (uint8_t) ceil(mprSelectorToSend / OLSR_TC_MAX_BODY_UNIT);
+  UWB_Address_t curMPRSelector = 0;
+  for (uint8_t r = 1; r <= round; r++) {
+    tcMsg->header.type = OLSR_TC_MESSAGE;
+    tcMsg->header.srcAddress = uwbGetAddress();
+    tcMsg->header.msgSequence = getNextTcSeqNumber();
+    tcMsg->header.ttl = 255;
+    tcMsg->header.hopCount = 0;
+    tcMsg->ANSN = olsrTcANSN;
+
+    uint8_t mprSelectorToSendThisRound = MIN(mprSelectorToSend, OLSR_TC_MAX_BODY_UNIT);
+    uint8_t mprSelectorSendCount = 0;
+    for (UWB_Address_t cur = curMPRSelector; cur <= NEIGHBOR_ADDRESS_MAX; cur++) {
+      if (mprSelectorSendCount == mprSelectorToSendThisRound) {
+        curMPRSelector = cur;
+        break;
+      }
+      if (mprSelectorSetHas(&mprSelectorSet, cur)) {
+        tcMsg->bodyUnits[mprSelectorSendCount].mprSelector = cur;
+        mprSelectorSendCount++;
+      }
+    }
+
+    tcMsg->header.msgLength =
+        sizeof(OLSR_Message_Header_t) + sizeof(tcMsg->ANSN) + mprSelectorToSendThisRound * sizeof(OLSR_TC_Body_Unit_t);
+    olsrPacket->header.seqNumber = getNextPacketSeqNumber();
+    olsrPacket->header.length = sizeof(OLSR_Packet_Header_t) + tcMsg->header.msgLength;
+    packet.header.length = sizeof(UWB_Packet_Header_t) + olsrPacket->header.length;
+    DEBUG_PRINT("olsrSendTc: %u send %u mpr selector in tc seq = %u, ANSN = %u at round %u.\n",
+                uwbGetAddress(),
+                mprSelectorToSendThisRound,
+                tcMsg->header.msgSequence,
+                tcMsg->ANSN,
+                r
+    );
+    uwbSendPacketBlock(&packet);
+  }
+
+}
+
+static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *message) {
+  uint16_t originAddress = message->header.srcAddress;
+  uint16_t tcSeqNumber = message->header.msgSequence;
+  if (olsrIsDupTc(originAddress, tcSeqNumber)) {
+    DEBUG_PRINT(
+        "olsrProcessTC: %u received duplicate tc message from neighbor %u, origin = %u, seq = %u, ttl = %u, hop = %u, ignore.\n",
+        uwbGetAddress(),
+        neighborAddress,
+        originAddress,
+        tcSeqNumber,
+        message->header.ttl,
+        message->header.hopCount);
+    return;
+  }
+  olsrUpdateDupTc(originAddress, tcSeqNumber);
+  DEBUG_PRINT("olsrProcessTC: %u received tc message from neighbor %u, origin = %u, seq = %u, ttl = %u, hop = %u.\n",
+              uwbGetAddress(),
+              neighborAddress,
+              originAddress,
+              tcSeqNumber,
+              message->header.ttl,
+              message->header.hopCount);
+
+  bool topologyChanged = false;
+  uint8_t bodyUnitCount = (message->header.msgLength - sizeof(OLSR_Message_Header_t)) / sizeof(OLSR_TC_Body_Unit_t);
+  for (uint8_t i = 0; i < bodyUnitCount; i++) {
+    UWB_Address_t mprSelector = message->bodyUnits[i].mprSelector;
+    // TODO: add (originAddress, mprSelector) to tc set, if tc set has changed then set topologyChanged = true
+  }
+
+  if (topologyChanged) {
+    // TODO: compute and update routing table
+  }
+
+  message->header.hopCount++;
+  message->header.ttl--;
+  /* Forward this tc message if TTL > 0 if am the MPR of this one-hop neighbor  */
+  if (message->header.ttl > 0 && mprSelectorSetHas(&mprSelectorSet, neighborAddress)) {
+    // TODO: forward this tc message
+  }
+}
+
 static void olsrTcTimerCallback(TimerHandle_t timer) {
-  // TODO: send TC
   xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
   xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
   printNeighborSet(neighborSet);
   printMPRSet(&mprSet);
   printMPRSelectorSet(&mprSelectorSet);
+  if (mprSelectorSet.mprSelectors.size > 0) {
+    olsrSendTc();
+  }
   xSemaphoreGive(neighborSet->mu);
   xSemaphoreGive(olsrSetsMutex);
 }
@@ -142,7 +237,7 @@ static void olsrTcTimerCallback(TimerHandle_t timer) {
 void olsrNeighborTopologyChangeHook(UWB_Address_t neighborAddress) {
   xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
   computeMPR();
-  getNextTcSeqNumber();
+  olsrTcANSN++;
   xSemaphoreGive(olsrSetsMutex);
 }
 
@@ -258,48 +353,6 @@ void olsrRxCallback(void *parameters) {
 
 void olsrTxCallback(void *parameters) {
 //  DEBUG_PRINT("olsrTxCallback\n");
-}
-
-static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *message) {
-  uint16_t originAddress = message->header.srcAddress;
-  uint16_t tcSeqNumber = message->header.msgSequence;
-  if (olsrIsDupTc(originAddress, tcSeqNumber)) {
-    DEBUG_PRINT(
-        "olsrProcessTC: %u received duplicate tc message from neighbor %u, origin = %u, seq = %u, ttl = %u, hop = %u, ignore.\n",
-        uwbGetAddress(),
-        neighborAddress,
-        originAddress,
-        tcSeqNumber,
-        message->header.ttl,
-        message->header.hopCount);
-    return;
-  } else {
-    olsrUpdateDupTc(originAddress, tcSeqNumber);
-    DEBUG_PRINT("olsrProcessTC: %u received tc message from neighbor %u, origin = %u, seq = %u, ttl = %u, hop = %u.\n",
-                uwbGetAddress(),
-                neighborAddress,
-                originAddress,
-                tcSeqNumber,
-                message->header.ttl,
-                message->header.hopCount);
-  }
-
-  bool topologyChanged = false;
-  uint8_t bodyUnitCount = (message->header.msgLength - sizeof(OLSR_Message_Header_t)) / sizeof(OLSR_TC_Body_Unit_t);
-  for (uint8_t i = 0; i < bodyUnitCount; i++) {
-    UWB_Address_t mprSelector = message->bodyUnits[i].mprSelector;
-    // TODO: add (originAddress, mprSelector) to tc set, if tc set has changed then set topologyChanged = true
-  }
-  if (topologyChanged) {
-    // TODO: compute and update routing table
-  }
-
-  message->header.hopCount++;
-  message->header.ttl--;
-  /* Forward this tc message if TTL > 0 and am the MPR of this one-hop neighbor  */
-  if (message->header.ttl > 0 && mprSelectorSetHas(&mprSelectorSet, neighborAddress)) {
-    // TODO: forward this tc message
-  }
 }
 
 static void olsrRxTask(void *parameters) {

@@ -12,7 +12,7 @@
 /* OLSR Message Constants */
 #define OLSR_PACKET_SIZE_MAX UWB_PAYLOAD_SIZE_MAX
 #define OLSR_PACKET_PAYLOAD_SIZE_MAX (OLSR_PACKET_SIZE_MAX - sizeof(OLSR_Packet_Header_t))
-#define OLSR_TC_MAX_BODY_UNIT ((OLSR_PACKET_PAYLOAD_SIZE_MAX - sizeof(OLSR_Message_Header_t)) / sizeof(OLSR_TC_Body_Unit_t))
+#define OLSR_TC_MAX_BODY_UNIT ((OLSR_PACKET_PAYLOAD_SIZE_MAX - sizeof(OLSR_Message_Header_t) - 2) / sizeof(OLSR_TC_Body_Unit_t))
 #define OLSR_TC_INTERVAL 500
 
 /* MPR Selector Set */
@@ -49,6 +49,7 @@ typedef struct {
 
 typedef struct {
   OLSR_Message_Header_t header;
+  uint16_t ANSN; /* Advertised Neighbor Sequence Number */
   OLSR_TC_Body_Unit_t bodyUnits[OLSR_TC_MAX_BODY_UNIT];
 } __attribute__((packed)) OLSR_TC_Message_t;
 
