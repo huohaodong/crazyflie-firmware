@@ -118,6 +118,9 @@ static void computeMPR() {
     }
   }
 
+  /* 4. For each currently selected mpr neighbor N, remove N from mpr set if all two-hop neighbors still covered. */
+  // TODO: optimize
+
   if (coverSet.size == neighborSet->twoHop.size && coverSet.bits == neighborSet->twoHop.bits) {
     DEBUG_PRINT("computeMPR: covered all %u two-hop neighbors.\n", neighborSet->twoHop.size);
     printNeighborBitSet(&coverSet);
