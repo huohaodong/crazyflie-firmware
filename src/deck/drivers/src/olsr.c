@@ -372,7 +372,7 @@ static void olsrRxTask(void *parameters) {
       xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
       xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
       xSemaphoreTake(routingTable->mu, portMAX_DELAY);
-      /* Since we do not send multiple messages into a single OLSR packet, this processing approach is OK. */
+      /* Since we do not send multiple messages in a single OLSR packet, this processing approach is OK. */
       OLSR_Message_Header_t *msgHeader = (OLSR_Message_Header_t *) olsrPacket->payload;
       switch (msgHeader->type) {
         case OLSR_HELLO_MESSAGE:DEBUG_PRINT("olsrRxTask: %u received HELLO from %u.\n",
