@@ -14,6 +14,9 @@
 #define DEBUG_PRINT
 #endif
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+
 static TaskHandle_t olsrRxTaskHandle;
 static QueueHandle_t rxQueue;
 static SemaphoreHandle_t olsrSetsMutex; /* Mutex for mprSet & mprSelectorSet & tcSet */
@@ -26,6 +29,16 @@ static TimerHandle_t olsrTcTimer;
 static uint16_t olsrTcSeqNumber = 0;
 static uint16_t lastReceivedTcSeqNumbers[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
 static uint16_t olsrPacketSeqNumber = 0;
+
+static bool olsrIsDupTc(UWB_Address_t originAddress, uint16_t seqNumber) {
+  ASSERT(originAddress <= NEIGHBOR_ADDRESS_MAX);
+  return seqNumber <= lastReceivedTcSeqNumbers[originAddress];
+}
+
+static void olsrUpdateDupTc(UWB_Address_t originAddress, uint16_t seqNumber) {
+  ASSERT(originAddress <= NEIGHBOR_ADDRESS_MAX);
+  lastReceivedTcSeqNumbers[originAddress] = MAX(lastReceivedTcSeqNumbers[originAddress], seqNumber);
+}
 
 static uint16_t getNextTcSeqNumber() {
   return olsrTcSeqNumber++;
@@ -247,19 +260,75 @@ void olsrTxCallback(void *parameters) {
 //  DEBUG_PRINT("olsrTxCallback\n");
 }
 
+static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *message) {
+  uint16_t originAddress = message->header.srcAddress;
+  uint16_t tcSeqNumber = message->header.msgSequence;
+  if (olsrIsDupTc(originAddress, tcSeqNumber)) {
+    DEBUG_PRINT(
+        "olsrProcessTC: %u received duplicate tc message from neighbor %u, origin = %u, seq = %u, ttl = %u, hop = %u, ignore.\n",
+        uwbGetAddress(),
+        neighborAddress,
+        originAddress,
+        tcSeqNumber,
+        message->header.ttl,
+        message->header.hopCount);
+    return;
+  } else {
+    olsrUpdateDupTc(originAddress, tcSeqNumber);
+    DEBUG_PRINT("olsrProcessTC: %u received tc message from neighbor %u, origin = %u, seq = %u, ttl = %u, hop = %u.\n",
+                uwbGetAddress(),
+                neighborAddress,
+                originAddress,
+                tcSeqNumber,
+                message->header.ttl,
+                message->header.hopCount);
+  }
+
+  bool topologyChanged = false;
+  uint8_t bodyUnitCount = (message->header.msgLength - sizeof(OLSR_Message_Header_t)) / sizeof(OLSR_TC_Body_Unit_t);
+  for (uint8_t i = 0; i < bodyUnitCount; i++) {
+    UWB_Address_t mprSelector = message->bodyUnits[i].mprSelector;
+    // TODO: add (originAddress, mprSelector) to tc set, if tc set has changed then set topologyChanged = true
+  }
+  if (topologyChanged) {
+    // TODO: compute and update routing table
+  }
+
+  message->header.hopCount++;
+  message->header.ttl--;
+  /* Forward this tc message if TTL > 0 and am the MPR of this one-hop neighbor  */
+  if (message->header.ttl > 0 && mprSelectorSetHas(&mprSelectorSet, neighborAddress)) {
+    // TODO: forward this tc message
+  }
+}
+
 static void olsrRxTask(void *parameters) {
   systemWaitStart();
 
   UWB_Packet_t rxPacketCache;
+  OLSR_Packet_t *olsrPacket = (OLSR_Packet_t *) &rxPacketCache.payload;
 
   while (true) {
     if (uwbReceivePacketBlock(UWB_OLSR_MESSAGE, &rxPacketCache)) {
       xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
       xSemaphoreTake(neighborSet->mu, portMAX_DELAY);
       xSemaphoreTake(routingTable->mu, portMAX_DELAY);
-
-      // TODO: process TC
-
+      /* Since we do not send multiple messages into a single OLSR packet, this processing approach is OK. */
+      OLSR_Message_Header_t *msgHeader = (OLSR_Message_Header_t *) olsrPacket->payload;
+      switch (msgHeader->type) {
+        case OLSR_HELLO_MESSAGE:DEBUG_PRINT("olsrRxTask: %u received HELLO from %u.\n",
+                                            uwbGetAddress(),
+                                            msgHeader->srcAddress);
+          // Use Ranging instead of HELLO here, see swarm_ranging.h, just ignore.
+          break;
+        case OLSR_TC_MESSAGE:DEBUG_PRINT("olsrRxTask: %u received TC from %u.\n",
+                                         uwbGetAddress(),
+                                         msgHeader->srcAddress);
+          olsrProcessTC(rxPacketCache.header.srcAddress, (OLSR_TC_Message_t *) &olsrPacket->payload);
+        default:DEBUG_PRINT("olsrRxTask: %u received unknown olsr message type from %u.\n",
+                            uwbGetAddress(),
+                            msgHeader->srcAddress);
+      }
       xSemaphoreGive(routingTable->mu);
       xSemaphoreGive(neighborSet->mu);
       xSemaphoreGive(olsrSetsMutex);
