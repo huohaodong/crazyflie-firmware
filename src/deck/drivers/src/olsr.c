@@ -139,7 +139,7 @@ static void olsrSendTc() {
   OLSR_Packet_t *olsrPacket = (OLSR_Packet_t *) &packet.payload;
   OLSR_TC_Message_t *tcMsg = (OLSR_TC_Message_t *) &olsrPacket->payload;
   uint8_t mprSelectorToSend = mprSelectorSet.mprSelectors.size;
-  uint8_t round = (uint8_t) ceil(mprSelectorToSend / OLSR_TC_MAX_BODY_UNIT);
+  uint8_t round = (uint8_t) ceil((double) mprSelectorToSend / OLSR_TC_MAX_BODY_UNIT);
   UWB_Address_t curMPRSelector = 0;
   for (uint8_t r = 1; r <= round; r++) {
     tcMsg->header.type = OLSR_TC_MESSAGE;
@@ -167,13 +167,17 @@ static void olsrSendTc() {
     olsrPacket->header.seqNumber = getNextPacketSeqNumber();
     olsrPacket->header.length = sizeof(OLSR_Packet_Header_t) + tcMsg->header.msgLength;
     packet.header.length = sizeof(UWB_Packet_Header_t) + olsrPacket->header.length;
-    DEBUG_PRINT("olsrSendTc: %u send %u mpr selector in tc seq = %u, ANSN = %u at round %u.\n",
+    DEBUG_PRINT("olsrSendTc: %u send %u mpr selector in tc = ",
                 uwbGetAddress(),
-                mprSelectorToSendThisRound,
+                mprSelectorToSendThisRound
+    );
+    for (uint8_t i = 0; i < mprSelectorToSendThisRound; i++) {
+      DEBUG_PRINT("%u ", tcMsg->bodyUnits[i].mprSelector);
+    }
+    DEBUG_PRINT(", seq = %u, ANSN = %u at round %u.\n",
                 tcMsg->header.msgSequence,
                 tcMsg->ANSN,
-                r
-    );
+                r);
     uwbSendPacketBlock(&packet);
   }
 
@@ -203,12 +207,14 @@ static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *mess
               message->header.hopCount);
 
   bool topologyChanged = false;
-  uint8_t bodyUnitCount = (message->header.msgLength - sizeof(OLSR_Message_Header_t)) / sizeof(OLSR_TC_Body_Unit_t);
+  uint8_t bodyUnitCount = (message->header.msgLength - sizeof(OLSR_Message_Header_t) - sizeof(message->ANSN)) / sizeof(OLSR_TC_Body_Unit_t);
+  DEBUG_PRINT("olsrProcessTC: mpr selector of %u = ", originAddress);
   for (uint8_t i = 0; i < bodyUnitCount; i++) {
     UWB_Address_t mprSelector = message->bodyUnits[i].mprSelector;
     // TODO: add (originAddress, mprSelector) to tc set, if tc set has changed then set topologyChanged = true
+    DEBUG_PRINT("%u ", mprSelector);
   }
-
+  DEBUG_PRINT("\n");
   if (topologyChanged) {
     // TODO: compute and update routing table
   }
@@ -378,6 +384,7 @@ static void olsrRxTask(void *parameters) {
                                          uwbGetAddress(),
                                          msgHeader->srcAddress);
           olsrProcessTC(rxPacketCache.header.srcAddress, (OLSR_TC_Message_t *) &olsrPacket->payload);
+          break;
         default:DEBUG_PRINT("olsrRxTask: %u received unknown olsr message type from %u.\n",
                             uwbGetAddress(),
                             msgHeader->srcAddress);
