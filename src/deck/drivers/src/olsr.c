@@ -8,6 +8,7 @@
 #include "timers.h"
 #include "olsr.h"
 #include "routing.h"
+#include "static_mem.h"
 
 #ifndef OLSR_DEBUG_ENABLE
 #undef DEBUG_PRINT
@@ -25,6 +26,8 @@ static Neighbor_Set_t *neighborSet;
 static MPR_Set_t mprSet;
 static MPR_Selector_Set_t mprSelectorSet;
 static TimerHandle_t mprSelectorSetEvictionTimer;
+NO_DMA_CCM_SAFE_ZERO_INIT Topology_Set_t topologySet;
+static TimerHandle_t topologySetEvictionTimer;
 static TimerHandle_t olsrTcTimer;
 static uint16_t olsrTcMsgSeqNumber = 0;
 static uint16_t olsrTcANSN = 0; /* Advertised Neighbor Sequence Number */
@@ -210,7 +213,8 @@ static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *mess
               message->header.hopCount);
 
   bool topologyChanged = false;
-  uint8_t bodyUnitCount = (message->header.msgLength - sizeof(OLSR_Message_Header_t) - sizeof(message->ANSN)) / sizeof(OLSR_TC_Body_Unit_t);
+  uint8_t bodyUnitCount =
+      (message->header.msgLength - sizeof(OLSR_Message_Header_t) - sizeof(message->ANSN)) / sizeof(OLSR_TC_Body_Unit_t);
   DEBUG_PRINT("olsrProcessTC: mpr selector of %u = ", originAddress);
   for (uint8_t i = 0; i < bodyUnitCount; i++) {
     UWB_Address_t mprSelector = message->bodyUnits[i].mprSelector;
@@ -288,6 +292,7 @@ void mprSelectorSetInit(MPR_Selector_Set_t *set) {
 void mprSelectorSetAdd(MPR_Selector_Set_t *set, UWB_Address_t neighborAddress) {
   if (!neighborBitSetHas(&set->mprSelectors, neighborAddress)) {
     neighborBitSetAdd(&set->mprSelectors, neighborAddress);
+    set->expirationTime[neighborAddress] = xTaskGetTickCount() + M2T(OLSR_MPR_SELECTOR_SET_HOLD_TIME);
   }
 }
 
@@ -336,6 +341,89 @@ static void mprSelectorSetClearExpireTimerCallback(TimerHandle_t timer) {
   xSemaphoreGive(olsrSetsMutex);
 }
 
+void topologySetInit(Topology_Set_t *set) {
+  set->size = 0;
+  for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
+    for (UWB_Address_t mpr = 0; mpr <= NEIGHBOR_ADDRESS_MAX; mpr++) {
+      set->items[mprSelector][mpr].destAddress = UWB_DEST_EMPTY;
+      set->items[mprSelector][mpr].lastAddress = UWB_DEST_EMPTY;
+      set->items[mprSelector][mpr].seqNumber = 0;
+      set->items[mprSelector][mpr].expirationTime = 0;
+    }
+  }
+}
+
+void topologySetAdd(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Address_t mpr, uint16_t seqNumber) {
+  ASSERT(mprSelector <= NEIGHBOR_ADDRESS_MAX);
+  ASSERT(mpr <= NEIGHBOR_ADDRESS_MAX);
+  if (!topologySetHas(set, mprSelector, mpr)) {
+    set->items[mprSelector][mpr].destAddress = mprSelector;
+    set->items[mprSelector][mpr].lastAddress = mpr;
+    set->items[mprSelector][mpr].seqNumber = seqNumber;
+    set->items[mprSelector][mpr].expirationTime = xTaskGetTickCount() + M2T(OLSR_TOPOLOGY_SET_HOLD_TIME);
+    set->size++;
+  }
+}
+
+void topologySetRemove(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Address_t mpr) {
+  ASSERT(mprSelector <= NEIGHBOR_ADDRESS_MAX);
+  ASSERT(mpr <= NEIGHBOR_ADDRESS_MAX);
+  if (topologySetHas(set, mprSelector, mpr)) {
+    set->items[mprSelector][mpr].destAddress = UWB_DEST_EMPTY;
+    set->items[mprSelector][mpr].lastAddress = UWB_DEST_EMPTY;
+    set->items[mprSelector][mpr].seqNumber = 0;
+    set->items[mprSelector][mpr].expirationTime = xTaskGetTickCount();
+    set->size--;
+  }
+}
+
+bool topologySetHas(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Address_t mpr) {
+  ASSERT(mprSelector <= NEIGHBOR_ADDRESS_MAX);
+  ASSERT(mpr <= NEIGHBOR_ADDRESS_MAX);
+  return set->items[mprSelector][mpr].destAddress != UWB_DEST_EMPTY;
+}
+
+void topologySetUpdateExpirationTime(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Address_t mpr) {
+  ASSERT(mprSelector <= NEIGHBOR_ADDRESS_MAX);
+  ASSERT(mpr <= NEIGHBOR_ADDRESS_MAX);
+  set->items[mprSelector][mpr].expirationTime = xTaskGetTickCount() + M2T(OLSR_TOPOLOGY_SET_HOLD_TIME);
+}
+
+int topologySetClearExpire(Topology_Set_t *set) {
+  Time_t curTime = xTaskGetTickCount();
+  int evictionCount = 0;
+  for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
+    for (UWB_Address_t mpr = 0; mpr <= NEIGHBOR_ADDRESS_MAX; mpr++) {
+      if (topologySetHas(set, mprSelector, mpr) && set->items[mprSelector][mpr].expirationTime <= curTime) {
+        evictionCount++;
+        topologySetRemove(set, mprSelector, mpr);
+        DEBUG_PRINT("topologySetClearExpire: topology tuple (mprSelector = %u, mpr = %u, ansn = %u) expire at %lu.\n",
+                    mprSelector,
+                    mpr,
+                    set->items[mprSelector][mpr].seqNumber,
+                    curTime);
+      }
+    }
+  }
+  return evictionCount;
+}
+
+static void topologySetClearExpireTimerCallback(TimerHandle_t timer) {
+  xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
+
+  Time_t curTime = xTaskGetTickCount();
+  DEBUG_PRINT("topologySetClearExpireTimerCallback: Trigger expiration timer at %lu.\n", curTime);
+
+  int evictionCount = topologySetClearExpire(&topologySet);
+  if (evictionCount > 0) {
+    DEBUG_PRINT("topologySetClearExpireTimerCallback: Evict total %d topology tuples.\n", evictionCount);
+  } else {
+    DEBUG_PRINT("topologySetClearExpireTimerCallback: Evict none.\n");
+  }
+
+  xSemaphoreGive(olsrSetsMutex);
+}
+
 void printMPRSet(MPR_Set_t *set) {
   DEBUG_PRINT("%u has %u mpr neighbors = ", uwbGetAddress(), set->size);
   for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
@@ -354,6 +442,10 @@ void printMPRSelectorSet(MPR_Selector_Set_t *set) {
     }
   }
   DEBUG_PRINT("\n");
+}
+
+void printTopologySet(Topology_Set_t *set) {
+  // TODO
 }
 
 void olsrRxCallback(void *parameters) {
@@ -415,6 +507,12 @@ void olsrInit() {
                                              (void *) 0,
                                              mprSelectorSetClearExpireTimerCallback);
   xTimerStart(mprSelectorSetEvictionTimer, M2T(0));
+  topologySetEvictionTimer = xTimerCreate("topologySetEvictionTimer",
+                                          M2T(OLSR_TOPOLOGY_SET_HOLD_TIME / 2),
+                                          pdTRUE,
+                                          (void *) 0,
+                                          topologySetClearExpireTimerCallback);
+  xTimerStart(topologySetEvictionTimer, M2T(0));
   olsrTcTimer = xTimerCreate("olsrTcTimer",
                              M2T(OLSR_TC_INTERVAL),
                              pdTRUE,

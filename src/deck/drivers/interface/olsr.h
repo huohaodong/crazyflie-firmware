@@ -18,6 +18,9 @@
 /* MPR Selector Set */
 #define OLSR_MPR_SELECTOR_SET_HOLD_TIME (6 * OLSR_TC_INTERVAL)
 
+/* Topology Set */
+#define OLSR_TOPOLOGY_SET_HOLD_TIME (6 * OLSR_TC_INTERVAL)
+
 typedef enum {
   OLSR_HELLO_MESSAGE = 1, /* Use Ranging instead of HELLO here, see swarm_ranging.h */
   OLSR_TC_MESSAGE = 2,
@@ -60,6 +63,18 @@ typedef struct {
   Time_t expirationTime[NEIGHBOR_ADDRESS_MAX + 1];
 } MPR_Selector_Set_t;
 
+typedef struct {
+  UWB_Address_t destAddress;
+  UWB_Address_t lastAddress; /* MPR of destAddress */
+  uint16_t seqNumber; /* ANSN */
+  Time_t expirationTime;
+} Topology_Tuple_t;
+
+typedef struct {
+  uint16_t size;
+  Topology_Tuple_t items[NEIGHBOR_ADDRESS_MAX + 1][NEIGHBOR_ADDRESS_MAX + 1];
+} Topology_Set_t;
+
 /* MPR Set Operations */
 MPR_Set_t *getGlobalMPRSet();
 void mprSetInit(MPR_Set_t *set);
@@ -77,10 +92,19 @@ bool mprSelectorSetHas(MPR_Selector_Set_t *set, UWB_Address_t neighborAddress);
 void mprSelectorSetUpdateExpirationTime(MPR_Selector_Set_t *set, UWB_Address_t neighborAddress);
 int mprSelectorSetClearExpire(MPR_Selector_Set_t *set);
 
+/* Topology Set Operations */
+void topologySetInit(Topology_Set_t *set);
+void topologySetAdd(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Address_t mpr, uint16_t seqNumber);
+void topologySetRemove(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Address_t mpr);
+bool topologySetHas(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Address_t mpr);
+void topologySetUpdateExpirationTime(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Address_t mpr);
+int topologySetClearExpire(Topology_Set_t *set);
+
 void olsrInit();
 
 /* Debug Operations */
 void printMPRSet(MPR_Set_t *set);
 void printMPRSelectorSet(MPR_Selector_Set_t *set);
+void printTopologySet(Topology_Set_t *set);
 
 #endif
