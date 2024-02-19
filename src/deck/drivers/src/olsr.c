@@ -1,4 +1,5 @@
 #include <math.h>
+#include <string.h>
 #include "FreeRTOS.h"
 #include "queue.h"
 #include "task.h"
@@ -135,6 +136,10 @@ static void computeMPR() {
   }
 }
 
+static void computeRoutingTable() {
+  // TODO
+}
+
 static void olsrSendTc() {
   UWB_Packet_t packet = {
       .header.type = UWB_OLSR_MESSAGE,
@@ -189,9 +194,14 @@ static void olsrSendTc() {
 
 }
 
-static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *message) {
-  uint16_t originAddress = message->header.srcAddress;
-  uint16_t tcSeqNumber = message->header.msgSequence;
+static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *tcMsg) {
+  /* 1. If the sender (not originator) of this message is not in the symmetric 1-hop neighborhood of this node, discard this tc message. */
+  if (!neighborSetHasOneHop(neighborSet, neighborAddress)) {
+    DEBUG_PRINT("olsrProcessTC: %u discard tc from non-one-hop neighbor %u.\n", uwbGetAddress(), neighborAddress);
+    return;
+  }
+  uint16_t originAddress = tcMsg->header.srcAddress;
+  uint16_t tcSeqNumber = tcMsg->header.msgSequence;
   if (olsrIsDupTc(originAddress, tcSeqNumber)) {
     DEBUG_PRINT(
         "olsrProcessTC: %u received duplicate tc message from neighbor %u, origin = %u, seq = %u, ttl = %u, hop = %u, ignore.\n",
@@ -199,8 +209,8 @@ static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *mess
         neighborAddress,
         originAddress,
         tcSeqNumber,
-        message->header.ttl,
-        message->header.hopCount);
+        tcMsg->header.ttl,
+        tcMsg->header.hopCount);
     return;
   }
   olsrUpdateDupTc(originAddress, tcSeqNumber);
@@ -209,28 +219,76 @@ static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *mess
               neighborAddress,
               originAddress,
               tcSeqNumber,
-              message->header.ttl,
-              message->header.hopCount);
-
+              tcMsg->header.ttl,
+              tcMsg->header.hopCount);
+  /* 2. If there exist some tuple in the topology set where mpr == originator and tuple.ANSN > tcMsg.ANSN, discard this tc message. */
+  for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
+    if (topologySetHas(&topologySet, mprSelector, originAddress)
+        && topologySet.items[mprSelector][originAddress].seqNumber > tcMsg->ANSN) {
+      DEBUG_PRINT("olsrProcessTC: tuple ansn = %u > tcMsg.ANSN = %u, discard.\n",
+                  topologySet.items[mprSelector][originAddress].seqNumber,
+                  tcMsg->ANSN
+      );
+      return;
+    }
+  }
   bool topologyChanged = false;
+  /* 3. Remove all tuples in the topology set where mpr == originator and tuple.ANSN < tcMsg.ANSN. */
+  for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
+    if (topologySetHas(&topologySet, mprSelector, originAddress)
+        && topologySet.items[mprSelector][originAddress].seqNumber < tcMsg->ANSN) {
+      DEBUG_PRINT("olsrProcessTC: discard tuple (mprSelector = %u, mpr = %u) with ansn = %u < tcMsg.ANSN = %u.\n",
+                  mprSelector,
+                  originAddress,
+                  topologySet.items[mprSelector][originAddress].seqNumber,
+                  tcMsg->ANSN
+      );
+      topologySetRemove(&topologySet, mprSelector, originAddress);
+      topologyChanged = true;
+    }
+  }
+
   uint8_t bodyUnitCount =
-      (message->header.msgLength - sizeof(OLSR_Message_Header_t) - sizeof(message->ANSN)) / sizeof(OLSR_TC_Body_Unit_t);
+      (tcMsg->header.msgLength - sizeof(OLSR_Message_Header_t) - sizeof(tcMsg->ANSN)) / sizeof(OLSR_TC_Body_Unit_t);
   DEBUG_PRINT("olsrProcessTC: mpr selector of %u = ", originAddress);
   for (uint8_t i = 0; i < bodyUnitCount; i++) {
-    UWB_Address_t mprSelector = message->bodyUnits[i].mprSelector;
-    // TODO: add (originAddress, mprSelector) to tc set, if tc set has changed then set topologyChanged = true
+    UWB_Address_t mprSelector = tcMsg->bodyUnits[i].mprSelector;
+    UWB_Address_t mpr = originAddress;
+    if (!topologySetHas(&topologySet, mprSelector, mpr)) {
+      topologyChanged = true;
+      topologySetAdd(&topologySet, mprSelector, mpr, tcMsg->ANSN);
+    } else {
+      topologySetUpdateExpirationTime(&topologySet, mprSelector, mpr);
+    }
     DEBUG_PRINT("%u ", mprSelector);
   }
   DEBUG_PRINT("\n");
+
   if (topologyChanged) {
-    // TODO: compute and update routing table
+    DEBUG_PRINT("olsrProcessTC: compute routing table.\n");
+    computeRoutingTable();
   }
 
-  message->header.hopCount++;
-  message->header.ttl--;
-  /* Forward this tc message if TTL > 0 if am the MPR of this one-hop neighbor  */
-  if (message->header.ttl > 0 && mprSelectorSetHas(&mprSelectorSet, neighborAddress)) {
-    // TODO: forward this tc message
+  tcMsg->header.hopCount++;
+  tcMsg->header.ttl--;
+  /* Forward this tc tcMsg if TTL > 0 if am the MPR of this one-hop neighbor  */
+  if (tcMsg->header.ttl > 0 && mprSelectorSetHas(&mprSelectorSet, neighborAddress)) {
+    // TODO: check
+    DEBUG_PRINT("olsrProcessTC: %u forward tc message from mpr selector %u, origin = %u, ttl = %u, hopCount = %u.\n",
+                uwbGetAddress(),
+                neighborAddress,
+                tcMsg->header.srcAddress,
+                tcMsg->header.ttl,
+                tcMsg->header.hopCount);
+    // TODO: check
+    UWB_Packet_t packet = {
+        .header.type = UWB_OLSR_MESSAGE,
+        .header.srcAddress = uwbGetAddress(),
+        .header.destAddress = UWB_DEST_ANY,
+        .header.length = sizeof(UWB_Packet_Header_t) + tcMsg->header.msgLength
+    };
+    memcpy(packet.payload, tcMsg, tcMsg->header.msgLength);
+    uwbSendPacketBlock(&packet);
   }
 }
 
@@ -372,7 +430,7 @@ void topologySetRemove(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Addre
     set->items[mprSelector][mpr].destAddress = UWB_DEST_EMPTY;
     set->items[mprSelector][mpr].lastAddress = UWB_DEST_EMPTY;
     set->items[mprSelector][mpr].seqNumber = 0;
-    set->items[mprSelector][mpr].expirationTime = xTaskGetTickCount();
+    set->items[mprSelector][mpr].expirationTime = 0;
     set->size--;
   }
 }
