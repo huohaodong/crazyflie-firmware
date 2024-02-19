@@ -671,7 +671,7 @@ void printRangingTableSet(Ranging_Table_Set_t *set) {
 }
 
 void printRangingMessage(Ranging_Message_t *rangingMessage) {
-  for (int i = 0; i < MAX_Tr_UNIT; i++) {
+  for (int i = 0; i < RANGING_MAX_Tr_UNIT; i++) {
     DEBUG_PRINT("lastTxTimestamp %d seq=%u, lastTxTimestamp=%2x%8lx\n",
                 i,
                 rangingMessage->header.lastTxTimestamps[i].seqNumber,
@@ -682,7 +682,7 @@ void printRangingMessage(Ranging_Message_t *rangingMessage) {
     return;
   }
   int body_unit_number = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
-  if (body_unit_number >= MAX_BODY_UNIT) {
+  if (body_unit_number >= RANGING_MAX_BODY_UNIT) {
     DEBUG_PRINT("===printRangingMessage: wrong body unit number occurs===\n");
     return;
   }
@@ -1043,7 +1043,7 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
    * help when experiencing continuous packet loss.
    */
   Ranging_Table_Tr_Rr_Buffer_t *neighborTrRrBuffer = &neighborRangingTable->TrRrBuffer;
-  for (int i = 0; i < MAX_Tr_UNIT; i++) {
+  for (int i = 0; i < RANGING_MAX_Tr_UNIT; i++) {
     if (rangingMessage->header.lastTxTimestamps[i].timestamp.full
         && neighborTrRrBuffer->candidates[neighborTrRrBuffer->cur].Rr.timestamp.full
         && rangingMessage->header.lastTxTimestamps[i].seqNumber
@@ -1100,7 +1100,7 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
   #endif
   for (int index = 0; index < rangingTableSet.size; index++) {
     Ranging_Table_t *table = &rangingTableSet.tables[index];
-    if (bodyUnitNumber >= MAX_BODY_UNIT) {
+    if (bodyUnitNumber >= RANGING_MAX_BODY_UNIT) {
       break;
     }
     if (table->latestReceived.timestamp.full) {
@@ -1141,7 +1141,7 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
   rangingMessage->header.srcAddress = MY_UWB_ADDRESS;
   rangingMessage->header.msgLength = sizeof(Ranging_Message_Header_t) + sizeof(Body_Unit_t) * bodyUnitNumber;
   rangingMessage->header.msgSequence = curSeqNumber;
-  getLatestNTxTimestamps(rangingMessage->header.lastTxTimestamps, MAX_Tr_UNIT);
+  getLatestNTxTimestamps(rangingMessage->header.lastTxTimestamps, RANGING_MAX_Tr_UNIT);
   float velocityX = logGetFloat(idVelocityX);
   float velocityY = logGetFloat(idVelocityY);
   float velocityZ = logGetFloat(idVelocityZ);

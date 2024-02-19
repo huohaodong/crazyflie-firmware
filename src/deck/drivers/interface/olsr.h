@@ -10,8 +10,47 @@
 #define OLSR_RX_QUEUE_ITEM_SIZE sizeof (UWB_Packet_t)
 
 /* OLSR Message Constants */
+#define OLSR_PACKET_SIZE_MAX UWB_PAYLOAD_SIZE_MAX
+#define OLSR_PACKET_PAYLOAD_SIZE_MAX (OLSR_PACKET_SIZE_MAX - sizeof(OLSR_Packet_Header_t))
+#define OLSR_TC_MAX_BODY_UNIT ((OLSR_PACKET_PAYLOAD_SIZE_MAX - sizeof(OLSR_Message_Header_t)) / sizeof(OLSR_TC_Body_Unit_t))
 #define OLSR_TC_INTERVAL 500
+
+/* MPR Selector Set */
 #define OLSR_MPR_SELECTOR_SET_HOLD_TIME (6 * OLSR_TC_INTERVAL)
+
+typedef enum {
+  OLSR_HELLO_MESSAGE = 1, /* Use Ranging instead of HELLO here, see swarm_ranging.h */
+  OLSR_TC_MESSAGE = 2,
+} OLSR_MESSAGE_TYPE;
+
+typedef struct {
+  uint16_t seqNumber;
+  uint16_t length;
+} __attribute__((packed)) OLSR_Packet_Header_t;
+
+typedef struct {
+  OLSR_Packet_Header_t header;
+  uint8_t payload[OLSR_PACKET_PAYLOAD_SIZE_MAX];
+} __attribute__((packed)) OLSR_Packet_t;
+
+typedef struct {
+  OLSR_MESSAGE_TYPE type;
+  uint16_t srcAddress;
+  uint16_t msgSequence;
+  uint16_t msgLength;
+  uint8_t ttl;
+  uint8_t hopCount;
+} __attribute__((packed)) OLSR_Message_Header_t;
+
+typedef struct {
+  UWB_Address_t mprSelector;
+  // TODO: add link state weight
+} __attribute__((packed)) OLSR_TC_Body_Unit_t;
+
+typedef struct {
+  OLSR_Message_Header_t header;
+  OLSR_TC_Body_Unit_t bodyUnits[OLSR_TC_MAX_BODY_UNIT];
+} __attribute__((packed)) OLSR_TC_Message_t;
 
 typedef Neighbor_Bit_Set_t MPR_Set_t;
 

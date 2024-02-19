@@ -16,13 +16,24 @@
 
 static TaskHandle_t olsrRxTaskHandle;
 static QueueHandle_t rxQueue;
-static SemaphoreHandle_t olsrSetsMutex;
+static SemaphoreHandle_t olsrSetsMutex; /* Mutex for mprSet & mprSelectorSet & tcSet */
 static Routing_Table_t *routingTable;
 static Neighbor_Set_t *neighborSet;
 static MPR_Set_t mprSet;
 static MPR_Selector_Set_t mprSelectorSet;
 static TimerHandle_t mprSelectorSetEvictionTimer;
 static TimerHandle_t olsrTcTimer;
+static uint16_t olsrTcSeqNumber = 0;
+static uint16_t lastReceivedTcSeqNumbers[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+static uint16_t olsrPacketSeqNumber = 0;
+
+static uint16_t getNextTcSeqNumber() {
+  return olsrTcSeqNumber++;
+}
+
+static uint16_t getNextPacketSeqNumber() {
+  return olsrPacketSeqNumber++;
+}
 
 static void computeMPR() {
   /* 1. Clear previous computed mpr set. */
@@ -115,10 +126,10 @@ static void olsrTcTimerCallback(TimerHandle_t timer) {
   xSemaphoreGive(olsrSetsMutex);
 }
 
-// TODO: check invocation
 void olsrNeighborTopologyChangeHook(UWB_Address_t neighborAddress) {
   xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
   computeMPR();
+  getNextTcSeqNumber();
   xSemaphoreGive(olsrSetsMutex);
 }
 
