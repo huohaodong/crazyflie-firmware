@@ -267,6 +267,8 @@ static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *tcMs
   if (topologyChanged) {
     DEBUG_PRINT("olsrProcessTC: compute routing table.\n");
     computeRoutingTable();
+    printTopologySet(&topologySet);
+    printRoutingTable(routingTable);
   }
 
   tcMsg->header.hopCount++;
@@ -502,8 +504,30 @@ void printMPRSelectorSet(MPR_Selector_Set_t *set) {
   DEBUG_PRINT("\n");
 }
 
+void printTopologySetTuple(Topology_Tuple_t *tuple) {
+  DEBUG_PRINT("destAddress\t lastAddress\t seqNumber\t expire\t \n");
+  DEBUG_PRINT("%u\t %u\t %u\t %lu\t \n",
+              tuple->destAddress,
+              tuple->lastAddress,
+              tuple->seqNumber,
+              tuple->expirationTime
+  );
+}
+
 void printTopologySet(Topology_Set_t *set) {
-  // TODO
+  DEBUG_PRINT("destAddress\t lastAddress\t seqNumber\t expire\t \n");
+  for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
+    for (UWB_Address_t mpr = 0; mpr <= NEIGHBOR_ADDRESS_MAX; mpr++) {
+      if (topologySetHas(set, mprSelector, mpr)) {
+        DEBUG_PRINT("%u\t %u\t %u\t %lu\t \n",
+                    set->items[mprSelector][mpr].destAddress,
+                    set->items[mprSelector][mpr].lastAddress,
+                    set->items[mprSelector][mpr].seqNumber,
+                    set->items[mprSelector][mpr].expirationTime
+        );
+      }
+    }
+  }
 }
 
 void olsrRxCallback(void *parameters) {

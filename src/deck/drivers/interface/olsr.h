@@ -64,7 +64,7 @@ typedef struct {
 } MPR_Selector_Set_t;
 
 typedef struct {
-  UWB_Address_t destAddress;
+  UWB_Address_t destAddress; /* MPR selector */
   UWB_Address_t lastAddress; /* MPR of destAddress */
   uint16_t seqNumber; /* ANSN */
   Time_t expirationTime;
@@ -105,6 +105,7 @@ void olsrInit();
 /* Debug Operations */
 void printMPRSet(MPR_Set_t *set);
 void printMPRSelectorSet(MPR_Selector_Set_t *set);
+void printTopologySetTuple(Topology_Tuple_t *tuple);
 void printTopologySet(Topology_Set_t *set);
 
 #endif
