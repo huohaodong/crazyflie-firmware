@@ -299,6 +299,7 @@ static void olsrTcTimerCallback(TimerHandle_t timer) {
   printNeighborSet(neighborSet);
   printMPRSet(&mprSet);
   printMPRSelectorSet(&mprSelectorSet);
+  printTopologySet(&topologySet);
   if (mprSelectorSet.mprSelectors.size > 0) {
     olsrSendTc();
   }
@@ -308,9 +309,11 @@ static void olsrTcTimerCallback(TimerHandle_t timer) {
 
 void olsrNeighborTopologyChangeHook(UWB_Address_t neighborAddress) {
   xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
+  xSemaphoreTake(routingTable->mu, portMAX_DELAY);
   computeMPR();
   computeRoutingTable();
   olsrTcANSN++;
+  xSemaphoreGive(routingTable->mu);
   xSemaphoreGive(olsrSetsMutex);
 }
 
