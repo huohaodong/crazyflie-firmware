@@ -97,25 +97,37 @@ static void rxCallback() {
 
   ASSERT(msgType < UWB_MESSAGE_TYPE_COUNT);
 
-  if (uwbGetAddress() == 3 && (packet->header.srcAddress == 7 || packet->header.srcAddress == 8)) {
+  if (uwbGetAddress() == 1 && (packet->header.srcAddress == 4 || packet->header.srcAddress == 5 || packet->header.srcAddress == 7 || packet->header.srcAddress == 8)) {
     dwt_forcetrxoff();
     dwt_rxenable(DWT_START_RX_IMMEDIATE);
     return;
   }
 
-  if (uwbGetAddress() == 5 && (packet->header.srcAddress == 8)) {
+  if (uwbGetAddress() == 3 && (packet->header.srcAddress == 5 || packet->header.srcAddress == 7 || packet->header.srcAddress == 8)) {
     dwt_forcetrxoff();
     dwt_rxenable(DWT_START_RX_IMMEDIATE);
     return;
   }
 
-  if (uwbGetAddress() == 7 && (packet->header.srcAddress == 3)) {
+  if (uwbGetAddress() == 4 && (packet->header.srcAddress == 1 || packet->header.srcAddress == 7 || packet->header.srcAddress == 8)) {
     dwt_forcetrxoff();
     dwt_rxenable(DWT_START_RX_IMMEDIATE);
     return;
   }
 
-  if (uwbGetAddress() == 8 && (packet->header.srcAddress == 3 || packet->header.srcAddress == 5)) {
+  if (uwbGetAddress() == 5 && (packet->header.srcAddress == 1 || packet->header.srcAddress == 3 || packet->header.srcAddress == 8)) {
+    dwt_forcetrxoff();
+    dwt_rxenable(DWT_START_RX_IMMEDIATE);
+    return;
+  }
+
+  if (uwbGetAddress() == 7 && (packet->header.srcAddress == 1 || packet->header.srcAddress == 3 || packet->header.srcAddress == 4)) {
+    dwt_forcetrxoff();
+    dwt_rxenable(DWT_START_RX_IMMEDIATE);
+    return;
+  }
+
+  if (uwbGetAddress() == 8 && (packet->header.srcAddress == 1 || packet->header.srcAddress == 3 || packet->header.srcAddress == 4 || packet->header.srcAddress == 5)) {
     dwt_forcetrxoff();
     dwt_rxenable(DWT_START_RX_IMMEDIATE);
     return;
