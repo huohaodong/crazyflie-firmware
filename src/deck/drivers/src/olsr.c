@@ -508,7 +508,7 @@ void printMPRSelectorSet(MPR_Selector_Set_t *set) {
 }
 
 void printTopologySetTuple(Topology_Tuple_t *tuple) {
-  DEBUG_PRINT("destAddress\t lastAddress\t seqNumber\t expire\t \n");
+  DEBUG_PRINT("dest\t last\t seq\t expire\t \n");
   DEBUG_PRINT("%u\t %u\t %u\t %lu\t \n",
               tuple->destAddress,
               tuple->lastAddress,
@@ -518,7 +518,7 @@ void printTopologySetTuple(Topology_Tuple_t *tuple) {
 }
 
 void printTopologySet(Topology_Set_t *set) {
-  DEBUG_PRINT("destAddress\t lastAddress\t seqNumber\t expire\t \n");
+  DEBUG_PRINT("dest\t last\t seq\t expire\t \n");
   for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
     for (UWB_Address_t mpr = 0; mpr <= NEIGHBOR_ADDRESS_MAX; mpr++) {
       if (topologySetHas(set, mprSelector, mpr)) {
@@ -592,6 +592,7 @@ void olsrInit() {
                                              (void *) 0,
                                              mprSelectorSetClearExpireTimerCallback);
   xTimerStart(mprSelectorSetEvictionTimer, M2T(0));
+  topologySetInit(&topologySet);
   topologySetEvictionTimer = xTimerCreate("topologySetEvictionTimer",
                                           M2T(OLSR_TOPOLOGY_SET_HOLD_TIME / 2),
                                           pdTRUE,
