@@ -37,6 +37,12 @@ static uint16_t olsrPacketSeqNumber = 0;
 
 static bool olsrIsDupTc(UWB_Address_t originAddress, uint16_t seqNumber) {
   ASSERT(originAddress <= NEIGHBOR_ADDRESS_MAX);
+  if (seqNumber < lastReceivedTcSeqNumbers[originAddress]
+      && (lastReceivedTcSeqNumbers[originAddress] - seqNumber) * OLSR_TC_INTERVAL > 2 * OLSR_TOPOLOGY_SET_HOLD_TIME) {
+    DEBUG_PRINT("olsrIsDupTc: origin %u may have restarted, reset seq to %u.\n", originAddress, seqNumber);
+    lastReceivedTcSeqNumbers[originAddress] = seqNumber;
+    return false;
+  }
   return seqNumber <= lastReceivedTcSeqNumbers[originAddress];
 }
 
@@ -288,7 +294,11 @@ static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *tcMs
         .header.destAddress = UWB_DEST_ANY,
         .header.length = sizeof(UWB_Packet_Header_t) + tcMsg->header.msgLength
     };
-    memcpy(packet.payload, tcMsg, tcMsg->header.msgLength);
+    OLSR_Packet_t *olsrPacket = (OLSR_Packet_t *) &packet.payload;
+    memcpy(&olsrPacket->payload, tcMsg, tcMsg->header.msgLength);
+    olsrPacket->header.seqNumber = getNextPacketSeqNumber();
+    olsrPacket->header.length = sizeof(OLSR_Packet_Header_t) + tcMsg->header.msgLength;
+    packet.header.length = sizeof(UWB_Packet_Header_t) + olsrPacket->header.length;
     uwbSendPacketBlock(&packet);
   }
 }
@@ -313,6 +323,7 @@ void olsrNeighborTopologyChangeHook(UWB_Address_t neighborAddress) {
   computeMPR();
   computeRoutingTable();
   olsrTcANSN++;
+  lastReceivedTcSeqNumbers[neighborAddress] = 0;
   xSemaphoreGive(routingTable->mu);
   xSemaphoreGive(olsrSetsMutex);
 }
