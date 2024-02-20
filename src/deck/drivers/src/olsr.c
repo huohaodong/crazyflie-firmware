@@ -166,13 +166,47 @@ static void computeRoutingTable() {
       }
     }
   }
-  float curWeight[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
   UWB_Address_t prevHopOf[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = UWB_DEST_EMPTY};
   bool visited[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = false};
+  #ifdef OLSR_ROUTING_COMPUTATION_USE_HOP
+  uint8_t curHop[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 255};
   /* Init path weight for one-hop neighbors */
   for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
     if (neighborSetHasOneHop(neighborSet, oneHopNeighbor)) {
-      // TODO: add link state as weight to calculate routing table, now using hop as weight.
+      curHop[oneHopNeighbor] = 1;
+      prevHopOf[oneHopNeighbor] = uwbGetAddress();
+    }
+  }
+  /* Perform dijkstra's algorithm to find the shortest path to each dest node in allKnownNodes */
+  for (UWB_Address_t round = 1; round <= allKnownNodes.size; round++) {
+    UWB_Address_t minNode = UWB_DEST_EMPTY;
+    uint8_t minHop = 255;
+    /* Find the best path in current round */
+    for (UWB_Address_t curNode = 0; curNode <= NEIGHBOR_ADDRESS_MAX; curNode++) {
+      if (neighborBitSetHas(&allKnownNodes, curNode) && !visited[curNode]) {
+        if (curHop[curNode] < minHop) {
+          minNode = curNode;
+          minHop = curHop[curNode];
+        }
+      }
+    }
+    visited[minNode] = true;
+    /* Update weight for each path with lastAddress (MPR) = maxNode */
+    for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
+      if (topologySetHas(&topologySet, mprSelector, minNode)) {
+        if (curHop[minNode] + 1 < curHop[mprSelector]) {
+          curHop[mprSelector] = curHop[minNode] + 1;
+          prevHopOf[mprSelector] = minNode;
+        }
+      }
+    }
+  }
+  #else
+  float curWeight[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+  /* Init path weight for one-hop neighbors */
+  for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
+    if (neighborSetHasOneHop(neighborSet, oneHopNeighbor)) {
+      // TODO: add link state as weight to calculate routing table.
       curWeight[oneHopNeighbor] = 1;
       prevHopOf[oneHopNeighbor] = uwbGetAddress();
     }
@@ -194,7 +228,7 @@ static void computeRoutingTable() {
     /* Update weight for each path with lastAddress (MPR) = maxNode */
     for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
       if (topologySetHas(&topologySet, mprSelector, maxNode)) {
-        // TODO: add link state as weight to calculate routing table, now using hop as weight.
+        // TODO: add link state as weight to calculate routing table.
         if (curWeight[mprSelector] < curWeight[maxNode] + 1) {
           curWeight[mprSelector] = curWeight[maxNode] + 1;
           prevHopOf[mprSelector] = maxNode;
@@ -202,6 +236,8 @@ static void computeRoutingTable() {
       }
     }
   }
+  #endif
+
   for (UWB_Address_t node = 0; node <= NEIGHBOR_ADDRESS_MAX; node++) {
     if (neighborBitSetHas(&allKnownNodes, node)) {
       UWB_Address_t cur = node;
