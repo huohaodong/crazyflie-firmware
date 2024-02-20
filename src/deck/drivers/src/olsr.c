@@ -143,7 +143,66 @@ static void computeMPR() {
 }
 
 static void computeRoutingTable() {
-  // TODO
+  /* Populate all known node currently in this network */
+  Neighbor_Bit_Set_t allKnownNodes;
+  neighborBitSetInit(&allKnownNodes);
+  /* Add one-hop and two-hop neighbors to allKnownNodes */
+  for (UWB_Address_t neighbor = 0; neighbor <= NEIGHBOR_ADDRESS_MAX; neighbor++) {
+    if (uwbGetAddress() != neighbor && neighborSetHas(neighborSet, neighbor)
+        && !neighborBitSetHas(&allKnownNodes, neighbor)) {
+      neighborBitSetAdd(&allKnownNodes, neighbor);
+    }
+  }
+  /* Add other known nodes in topology set to allKnownNodes */
+  for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
+    for (UWB_Address_t mpr = 0; mpr <= NEIGHBOR_ADDRESS_MAX; mpr++) {
+      if (topologySetHas(&topologySet, mprSelector, mpr)) {
+        if (uwbGetAddress() != mprSelector && !neighborBitSetHas(&allKnownNodes, mprSelector)) {
+          neighborBitSetAdd(&allKnownNodes, mprSelector);
+        }
+        if (uwbGetAddress() != mpr && !neighborBitSetHas(&allKnownNodes, mpr)) {
+          neighborBitSetAdd(&allKnownNodes, mpr);
+        }
+      }
+    }
+  }
+  float curWeight[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+  UWB_Address_t prevHopOf[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = UWB_DEST_EMPTY};
+  bool visited[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = false};
+  /* Init path weight for one-hop neighbors */
+  for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
+    if (neighborSetHasOneHop(neighborSet, oneHopNeighbor)) {
+      // TODO: add link state as weight to calculate routing table, now using hop as weight.
+      curWeight[oneHopNeighbor] = 1;
+      prevHopOf[oneHopNeighbor] = uwbGetAddress();
+    }
+  }
+  /* Perform dijkstra's algorithm to find the largest weight to each dest node in allKnownNodes */
+  for (UWB_Address_t round = 1; round <= allKnownNodes.size; round++) {
+    UWB_Address_t maxNode = UWB_DEST_EMPTY;
+    float maxWeight = 0;
+    /* Find the best path in current round */
+    for (UWB_Address_t curNode = 0; curNode <= NEIGHBOR_ADDRESS_MAX; curNode++) {
+      if (neighborBitSetHas(&allKnownNodes, curNode) && !visited[curNode]) {
+        if (curWeight[curNode] > maxWeight) {
+          maxNode = curNode;
+          maxWeight = curWeight[curNode];
+        }
+      }
+    }
+    visited[maxNode] = true;
+    /* Update weight for each path with lastAddress (MPR) = maxNode */
+    for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
+      if (topologySetHas(&topologySet, mprSelector, maxNode)) {
+        // TODO: add link state as weight to calculate routing table, now using hop as weight.
+        if (curWeight[mprSelector] < curWeight[maxNode] + 1) {
+          curWeight[mprSelector] = curWeight[maxNode] + 1;
+          prevHopOf[mprSelector] = maxNode;
+        }
+      }
+    }
+  }
+
 }
 
 static void olsrSendTc() {
