@@ -202,7 +202,19 @@ static void computeRoutingTable() {
       }
     }
   }
-
+  for (UWB_Address_t node = 0; node <= NEIGHBOR_ADDRESS_MAX; node++) {
+    if (neighborBitSetHas(&allKnownNodes, node)) {
+      UWB_Address_t cur = node;
+      DEBUG_PRINT("%u", cur);
+      // TODO: check
+      while (prevHopOf[cur] != uwbGetAddress()) {
+        DEBUG_PRINT("<-%u", prevHopOf[cur]);
+        cur = prevHopOf[cur];
+      }
+      DEBUG_PRINT("<-%u \n", prevHopOf[cur]);
+      // TODO: add route entry
+    }
+  }
 }
 
 static void olsrSendTc() {
