@@ -519,6 +519,7 @@ void neighborSetAddRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Address
   ASSERT(to <= NEIGHBOR_ADDRESS_MAX);
   if (!neighborBitSetHas(&set->twoHopReachSets[to], from)) {
     neighborBitSetAdd(&set->twoHopReachSets[to], from);
+    neighborSetHooksInvoke(&set->neighborTopologyChangeHooks, to);
   }
 }
 
@@ -527,6 +528,7 @@ void neighborSetRemoveRelation(Neighbor_Set_t *set, UWB_Address_t from, UWB_Addr
   ASSERT(to <= NEIGHBOR_ADDRESS_MAX);
   if (neighborBitSetHas(&set->twoHopReachSets[to], from)) {
     neighborBitSetRemove(&set->twoHopReachSets[to], from);
+    neighborSetHooksInvoke(&set->neighborTopologyChangeHooks, to);
   }
 }
 
