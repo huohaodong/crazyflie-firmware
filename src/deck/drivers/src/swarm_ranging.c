@@ -82,6 +82,16 @@ uint32_t statTotalLossCount = 0;
 double statTotalLossRate = 0.0;
 #endif
 
+static void printSRangingStat() {
+  DEBUG_PRINT("totalSend \t totalRecv \t totalLossRate \t RangingCount \t RangingSuccess \t \n");
+  DEBUG_PRINT("%lu \t %lu \t %f \t %lu \t %lu \t \n",
+              statTotalSendCount,
+              statTotalRecvCount,
+              statTotalLossRate,
+              statTotalRangingCount,
+              statTotalRangingSuccessCount);
+}
+
 static void statUpdateTX(Ranging_Message_t *rangingMessage) {
   statTotalSendCount++;
   uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
@@ -89,6 +99,7 @@ static void statUpdateTX(Ranging_Message_t *rangingMessage) {
     UWB_Address_t neighborAddress = rangingMessage->bodyUnits[i].address;
     statSendCount[neighborAddress]++;
   }
+  printSRangingStat();
 }
 
 static void statUpdateRX(Ranging_Message_t *rangingMessage) {
@@ -113,16 +124,6 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
   statLossRate[neighborAddress] =
       statLossCount[neighborAddress] * 1.0 / (statLastRecvSeq[neighborAddress] - statFirstRecvSeq[neighborAddress] + 1);
   statTotalLossRate = statTotalLossCount * 1.0 / statTotalRecvCount;
-}
-
-static void printSRangingStat() {
-  DEBUG_PRINT("totalSend \t totalRecv \t totalLossRate \t RangingCount \t RangingSuccess \t \n");
-  DEBUG_PRINT("%lu \t %lu \t %f \t %lu \t %lu \t",
-              statTotalSendCount,
-              statTotalRecvCount,
-              statTotalLossRate,
-              statTotalRangingCount,
-              statTotalRangingSuccessCount);
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
