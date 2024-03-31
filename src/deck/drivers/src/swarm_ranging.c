@@ -82,14 +82,24 @@ uint32_t statTotalLossCount = 0;
 double statTotalLossRate = 0.0;
 #endif
 
-static void printSRangingStat() {
+static void printRangingStat() {
   DEBUG_PRINT("totalSend\t totalRecv\t totalLossRate\t RangingCount\t RangingSuccess\t\n");
-  DEBUG_PRINT("%lu\t %lu\t %f\t %lu\t %lu\t\n",
+  DEBUG_PRINT("%lu\t %lu\t %.2f\t %lu\t %lu\t\n",
               statTotalSendCount,
               statTotalRecvCount,
               statTotalLossRate,
               statTotalRangingCount,
               statTotalRangingSuccessCount);
+}
+
+static void printNeighborStat(UWB_Address_t neighborAddress) {
+  DEBUG_PRINT("send\t recv\t lossRate\t RC\t RS\t of neighbor %u\n", neighborAddress);
+  DEBUG_PRINT("%lu\t %lu\t %.2f\t %lu\t %lu\t\n",
+              statSendCount[neighborAddress],
+              statRecvCount[neighborAddress],
+              statLossRate[neighborAddress],
+              statRangingCount[neighborAddress],
+              statRangingSuccessCount[neighborAddress]);
 }
 
 static void statUpdateTX(Ranging_Message_t *rangingMessage) {
@@ -99,13 +109,13 @@ static void statUpdateTX(Ranging_Message_t *rangingMessage) {
     UWB_Address_t neighborAddress = rangingMessage->bodyUnits[i].address;
     statSendCount[neighborAddress]++;
   }
-  printSRangingStat();
+  printRangingStat();
 }
 
 static void statUpdateRX(Ranging_Message_t *rangingMessage) {
   statTotalRecvCount++;
   UWB_Address_t neighborAddress = rangingMessage->header.srcAddress;
-  if (statLastRecvSeq[neighborAddress] >= rangingMessage->header.msgSequence) {
+  if (statLastRecvSeq[neighborAddress] >= rangingMessage->header.msgSequence || statFirstRecvSeq[neighborAddress] == 0) {
     /* Sequence number wrap-around or this neighbor just have restarted, reset corresponding stat */
     statRecvCount[neighborAddress] = 1;
     statSendCount[neighborAddress] = 0;
@@ -125,7 +135,7 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
   statLossRate[neighborAddress] =
       statLossCount[neighborAddress] * 1.0 / (statLastRecvSeq[neighborAddress] - statFirstRecvSeq[neighborAddress] + 1);
   statTotalLossRate = statTotalLossCount * 1.0 / statTotalRecvCount;
-  DEBUG_PRINT("totalLossCount = %lu, lossCount = %u\n", statTotalLossCount, lossCount);
+  printNeighborStat(rangingMessage->header.srcAddress);
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
