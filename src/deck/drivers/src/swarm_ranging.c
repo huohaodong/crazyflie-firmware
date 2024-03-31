@@ -36,7 +36,7 @@ static TaskHandle_t uwbRangingRxTaskHandle = 0;
 static int TfBufferIndex = 0;
 static Timestamp_Tuple_t TfBuffer[Tf_BUFFER_POOL_SIZE] = {0};
 static SemaphoreHandle_t TfBufferMutex;
-static int rangingSeqNumber = 1;
+static int rangingSeqNumber = 0;
 static logVarId_t idVelocityX, idVelocityY, idVelocityZ;
 static float velocity;
 static Ranging_Table_t EMPTY_RANGING_TABLE = {
@@ -83,8 +83,8 @@ double statTotalLossRate = 0.0;
 #endif
 
 static void printSRangingStat() {
-  DEBUG_PRINT("totalSend \t totalRecv \t totalLossRate \t RangingCount \t RangingSuccess \t \n");
-  DEBUG_PRINT("%lu \t %lu \t %f \t %lu \t %lu \t \n",
+  DEBUG_PRINT("totalSend\t totalRecv\t totalLossRate\t RangingCount\t RangingSuccess\t\n");
+  DEBUG_PRINT("%lu\t %lu\t %f\t %lu\t %lu\t\n",
               statTotalSendCount,
               statTotalRecvCount,
               statTotalLossRate,
@@ -105,7 +105,7 @@ static void statUpdateTX(Ranging_Message_t *rangingMessage) {
 static void statUpdateRX(Ranging_Message_t *rangingMessage) {
   statTotalRecvCount++;
   UWB_Address_t neighborAddress = rangingMessage->header.srcAddress;
-  if (statLastRecvSeq[neighborAddress] > rangingMessage->header.msgSequence) {
+  if (statLastRecvSeq[neighborAddress] >= rangingMessage->header.msgSequence) {
     /* Sequence number wrap-around or this neighbor just have restarted, reset corresponding stat */
     statRecvCount[neighborAddress] = 1;
     statSendCount[neighborAddress] = 0;
@@ -118,12 +118,14 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
     return;
   }
   statRecvCount[neighborAddress]++;
-  statLossCount[neighborAddress] += rangingMessage->header.msgSequence - statLastRecvSeq[neighborAddress] - 1;
-  statTotalLossCount += rangingMessage->header.msgSequence - statLastRecvSeq[neighborAddress] - 1;
+  uint16_t lossCount = rangingMessage->header.msgSequence - statLastRecvSeq[neighborAddress] - 1;
+  statLossCount[neighborAddress] += lossCount;
+  statTotalLossCount += lossCount;
   statLastRecvSeq[neighborAddress] = rangingMessage->header.msgSequence;
   statLossRate[neighborAddress] =
       statLossCount[neighborAddress] * 1.0 / (statLastRecvSeq[neighborAddress] - statFirstRecvSeq[neighborAddress] + 1);
   statTotalLossRate = statTotalLossCount * 1.0 / statTotalRecvCount;
+  DEBUG_PRINT("totalLossCount = %lu, lossCount = %u\n", statTotalLossCount, lossCount);
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
@@ -1209,8 +1211,8 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
  */
 static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
   int8_t bodyUnitNumber = 0;
-  rangingSeqNumber++;
   int curSeqNumber = rangingSeqNumber;
+  rangingSeqNumber++;
   rangingMessage->header.filter = 0;
   Time_t curTime = xTaskGetTickCount();
   /* Using the default RANGING_PERIOD when DYNAMIC_RANGING_PERIOD is not enabled. */
