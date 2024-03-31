@@ -84,7 +84,7 @@ double statTotalLossRate = 0.0;
 
 static void printRangingStat() {
   DEBUG_PRINT("totalSend\t totalRecv\t totalLossRate\t RangingCount\t RangingSuccess\t\n");
-  DEBUG_PRINT("%lu\t %lu\t %.2f\t %lu\t %lu\t\n",
+  DEBUG_PRINT("%lu\t %lu\t %f\t %lu\t %lu\t\n",
               statTotalSendCount,
               statTotalRecvCount,
               statTotalLossRate,
@@ -94,7 +94,7 @@ static void printRangingStat() {
 
 static void printNeighborStat(UWB_Address_t neighborAddress) {
   DEBUG_PRINT("send\t recv\t lossRate\t RC\t RS\t of neighbor %u\n", neighborAddress);
-  DEBUG_PRINT("%lu\t %lu\t %.2f\t %lu\t %lu\t\n",
+  DEBUG_PRINT("%lu\t %lu\t %f\t %lu\t %lu\t\n",
               statSendCount[neighborAddress],
               statRecvCount[neighborAddress],
               statLossRate[neighborAddress],
@@ -109,7 +109,7 @@ static void statUpdateTX(Ranging_Message_t *rangingMessage) {
     UWB_Address_t neighborAddress = rangingMessage->bodyUnits[i].address;
     statSendCount[neighborAddress]++;
   }
-  printRangingStat();
+//  printRangingStat();
 }
 
 static void statUpdateRX(Ranging_Message_t *rangingMessage) {
