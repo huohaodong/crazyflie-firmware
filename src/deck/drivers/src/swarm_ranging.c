@@ -66,6 +66,7 @@ static Ranging_Table_t EMPTY_RANGING_TABLE = {
 int16_t distanceTowards[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
 
 #ifdef ENABLE_RANGING_STAT
+float statLossRateF = 0.0f;
 uint32_t statTotalSendCount = 0;
 uint32_t statTotalRecvCount = 0;
 uint32_t statTotalRangingCount = 0;
@@ -135,6 +136,7 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
   statLossRate[neighborAddress] =
       statLossCount[neighborAddress] * 1.0 / (statLastRecvSeq[neighborAddress] - statFirstRecvSeq[neighborAddress] + 1);
   statTotalLossRate = statTotalLossCount * 1.0 / statTotalRecvCount;
+  statLossRateF = (float) statTotalLossRate;
   printNeighborStat(rangingMessage->header.srcAddress);
 }
 
@@ -1418,14 +1420,15 @@ void rangingInit() {
 }
 
 LOG_GROUP_START(Ranging)
-        LOG_ADD(LOG_INT16, distTo1, distanceTowards + 1)
-        LOG_ADD(LOG_INT16, distTo2, distanceTowards + 2)
-        LOG_ADD(LOG_INT16, distTo3, distanceTowards + 3)
-        LOG_ADD(LOG_INT16, distTo4, distanceTowards + 4)
-        LOG_ADD(LOG_INT16, distTo5, distanceTowards + 5)
-        LOG_ADD(LOG_INT16, distTo6, distanceTowards + 6)
-        LOG_ADD(LOG_INT16, distTo7, distanceTowards + 7)
-        LOG_ADD(LOG_INT16, distTo8, distanceTowards + 8)
-        LOG_ADD(LOG_INT16, distTo9, distanceTowards + 9)
-        LOG_ADD(LOG_INT16, distTo10, distanceTowards + 10)
+//        LOG_ADD(LOG_INT16, distTo1, distanceTowards + 1)
+//        LOG_ADD(LOG_INT16, distTo2, distanceTowards + 2)
+//        LOG_ADD(LOG_INT16, distTo3, distanceTowards + 3)
+//        LOG_ADD(LOG_INT16, distTo4, distanceTowards + 4)
+//        LOG_ADD(LOG_INT16, distTo5, distanceTowards + 5)
+//        LOG_ADD(LOG_INT16, distTo6, distanceTowards + 6)
+//        LOG_ADD(LOG_INT16, distTo7, distanceTowards + 7)
+//        LOG_ADD(LOG_INT16, distTo8, distanceTowards + 8)
+//        LOG_ADD(LOG_INT16, distTo9, distanceTowards + 9)
+//        LOG_ADD(LOG_INT16, distTo10, distanceTowards + 10)
+        LOG_ADD(LOG_FLOAT, lossRate, &statLossRateF)
 LOG_GROUP_STOP(Ranging)
