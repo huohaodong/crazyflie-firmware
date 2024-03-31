@@ -65,6 +65,66 @@ static Ranging_Table_t EMPTY_RANGING_TABLE = {
 
 int16_t distanceTowards[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
 
+#ifdef ENABLE_RANGING_STAT
+uint32_t statTotalSendCount = 0;
+uint32_t statTotalRecvCount = 0;
+uint32_t statTotalRangingCount = 0;
+uint32_t statTotalRangingSuccessCount = 0;
+uint32_t statRecvCount[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+uint32_t statSendCount[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+uint32_t statLossCount[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+uint32_t statRangingCount[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+uint32_t statRangingSuccessCount[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+uint16_t statFirstRecvSeq[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+uint16_t statLastRecvSeq[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+double statLossRate[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0.0};
+uint32_t statTotalLossCount = 0;
+double statTotalLossRate = 0.0;
+#endif
+
+static void statUpdateTX(Ranging_Message_t *rangingMessage) {
+  statTotalSendCount++;
+  uint8_t bodyUnitCount = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
+  for (int i = 0; i < bodyUnitCount; i++) {
+    UWB_Address_t neighborAddress = rangingMessage->bodyUnits[i].address;
+    statSendCount[neighborAddress]++;
+  }
+}
+
+static void statUpdateRX(Ranging_Message_t *rangingMessage) {
+  statTotalRecvCount++;
+  UWB_Address_t neighborAddress = rangingMessage->header.srcAddress;
+  if (statLastRecvSeq[neighborAddress] > rangingMessage->header.msgSequence) {
+    /* Sequence number wrap-around or this neighbor just have restarted, reset corresponding stat */
+    statRecvCount[neighborAddress] = 1;
+    statSendCount[neighborAddress] = 0;
+    statLossCount[neighborAddress] = 0;
+    statRangingCount[neighborAddress] = 0;
+    statRangingSuccessCount[neighborAddress] = 0;
+    statFirstRecvSeq[neighborAddress] = rangingMessage->header.msgSequence;
+    statLastRecvSeq[neighborAddress] = rangingMessage->header.msgSequence;
+    statLossRate[neighborAddress] = 0.0;
+    return;
+  }
+  statRecvCount[neighborAddress]++;
+  statLossCount[neighborAddress] += rangingMessage->header.msgSequence - statLastRecvSeq[neighborAddress] - 1;
+  statTotalLossCount += rangingMessage->header.msgSequence - statLastRecvSeq[neighborAddress] - 1;
+  statLastRecvSeq[neighborAddress] = rangingMessage->header.msgSequence;
+  statLossRate[neighborAddress] =
+      statLossCount[neighborAddress] * 1.0 / (statLastRecvSeq[neighborAddress] - statFirstRecvSeq[neighborAddress] + 1);
+  statTotalLossRate = statTotalLossCount * 1.0 / statTotalRecvCount;
+}
+
+static void printSRangingStat() {
+  DEBUG_PRINT("totalSend \t totalRecv \t totalLossRate \t RangingCount \t RangingSuccess \t \n");
+  DEBUG_PRINT("%lu \t %lu \t %f \t %lu \t %lu \t",
+              statTotalSendCount,
+              statTotalRecvCount,
+              statTotalLossRate,
+              statTotalRangingCount,
+              statTotalRangingSuccessCount);
+}
+
 int16_t getDistance(UWB_Address_t neighborAddress) {
   ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
   return distanceTowards[neighborAddress];
@@ -957,6 +1017,14 @@ static void S4_RX_Rf(Ranging_Table_t *rangingTable) {
   int16_t distance = computeDistance(rangingTable->Tp, rangingTable->Rp,
                                      Tr_Rr_Candidate.Tr, Tr_Rr_Candidate.Rr,
                                      rangingTable->Tf, rangingTable->Rf);
+  #ifdef ENABLE_RANGING_STAT
+  statTotalRangingCount++;
+  statRangingCount[rangingTable->neighborAddress]++;
+  if (distance > 0) {
+    statTotalRangingSuccessCount++;
+    statRangingSuccessCount[rangingTable->neighborAddress]++;
+  }
+  #endif
   if (distance > 0) {
     rangingTable->distance = distance;
     setDistance(rangingTable->neighborAddress, distance);
@@ -1240,6 +1308,9 @@ static void uwbRangingTxTask(void *parameters) {
 //    printRangingTableSet(&rangingTableSet);
 //    printNeighborSet(&neighborSet);
 
+    #ifdef ENABLE_RANGING_STAT
+    statUpdateTX(rangingMessage);
+    #endif
     xSemaphoreGive(neighborSet.mu);
     xSemaphoreGive(rangingTableSet.mu);
     vTaskDelay(taskDelay);
@@ -1258,6 +1329,10 @@ static void uwbRangingRxTask(void *parameters) {
 
       processRangingMessage(&rxPacketCache);
       topologySensing(&rxPacketCache.rangingMessage);
+
+      #ifdef ENABLE_RANGING_STAT
+      statUpdateRX(&rxPacketCache.rangingMessage);
+      #endif
 
       xSemaphoreGive(neighborSet.mu);
       xSemaphoreGive(rangingTableSet.mu);

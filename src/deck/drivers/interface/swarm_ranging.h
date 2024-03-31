@@ -5,7 +5,7 @@
 #include "adhocdeck.h"
 #include "semphr.h"
 
-//#define RANGING_DEBUG_ENABLE
+#define RANGING_DEBUG_ENABLE
 
 /* Function Switch */
 //#define ENABLE_BUS_BOARDING_SCHEME
@@ -13,6 +13,7 @@
 #ifdef ENABLE_DYNAMIC_RANGING_PERIOD
   #define DYNAMIC_RANGING_COEFFICIENT 1
 #endif
+#define ENABLE_RANGING_STAT
 
 /* Ranging Constants */
 #define RANGING_PERIOD 200 // default in 200ms
