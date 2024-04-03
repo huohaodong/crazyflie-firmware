@@ -45,7 +45,7 @@
 static dwt_txconfig_t uwbTxConfigOptions = {
     .PGcount = 0x0,
     .PGdly = 0x34,
-    .power = 0x3f3f3f3f
+    .power = 0xfdfdfdfd
 };
 
 /* PHR configuration */
