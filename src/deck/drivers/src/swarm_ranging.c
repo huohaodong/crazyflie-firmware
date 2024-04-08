@@ -79,7 +79,7 @@ uint16_t statFirstRecvSeq[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_M
 uint16_t statLastRecvSeq[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
 double statLossRate[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0.0};
 uint32_t statTotalLossCount = 0;
-double statTotalLossRate = 0.0;
+float statTotalLossRate = 0.0;
 static TimerHandle_t statTimer;
 #endif
 
