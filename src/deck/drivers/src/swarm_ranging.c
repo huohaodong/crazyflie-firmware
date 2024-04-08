@@ -79,8 +79,9 @@ uint16_t statFirstRecvSeq[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_M
 uint16_t statLastRecvSeq[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
 double statLossRate[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0.0};
 uint32_t statTotalLossCount = 0;
-float statTotalLossRate = 0.0;
+double statTotalLossRate = 0.0;
 static TimerHandle_t statTimer;
+float lossRateF = 0.0f;
 #endif
 
 
@@ -137,6 +138,7 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
   statLossRate[neighborAddress] =
       statLossCount[neighborAddress] * 1.0 / (statLastRecvSeq[neighborAddress] - statFirstRecvSeq[neighborAddress] + 1);
   statTotalLossRate = statTotalLossCount * 1.0 / statTotalRecvCount;
+  lossRateF = (float) statTotalLossRate;
 //  printNeighborStat(rangingMessage->header.srcAddress);
 }
 
@@ -1442,7 +1444,7 @@ LOG_GROUP_START(Ranging)
         LOG_ADD(LOG_INT16, distTo8, distanceTowards + 8)
         LOG_ADD(LOG_INT16, distTo9, distanceTowards + 9)
         LOG_ADD(LOG_INT16, distTo10, distanceTowards + 10)
-        LOG_ADD(LOG_FLOAT, lossRate, &statLossRate)
+        LOG_ADD(LOG_FLOAT, lossRate, &lossRateF)
         LOG_ADD(LOG_UINT32, sendCount, &statTotalSendCount)
         LOG_ADD(LOG_UINT32, recvCount, &statTotalRecvCount)
         LOG_ADD(LOG_UINT32, rc, &statTotalRangingCount)
