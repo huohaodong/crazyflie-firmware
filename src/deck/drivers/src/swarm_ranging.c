@@ -1304,6 +1304,8 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
   return taskDelay;
 }
 
+uint16_t masterPeriod = RANGING_PERIOD;
+
 static void uwbRangingTxTask(void *parameters) {
   systemWaitStart();
 
@@ -1325,6 +1327,7 @@ static void uwbRangingTxTask(void *parameters) {
 
     Time_t taskDelay = generateRangingMessage(rangingMessage);
     txPacketCache.header.length = sizeof(UWB_Packet_Header_t) + rangingMessage->header.msgLength;
+    rangingMessage->header.period = RANGING_PERIOD;
     uwbSendPacketBlock(&txPacketCache);
 //    printRangingTableSet(&rangingTableSet);
 //    printNeighborSet(&neighborSet);
@@ -1334,7 +1337,7 @@ static void uwbRangingTxTask(void *parameters) {
     #endif
     xSemaphoreGive(neighborSet.mu);
     xSemaphoreGive(rangingTableSet.mu);
-    vTaskDelay(taskDelay);
+    vTaskDelay(masterPeriod);
   }
 }
 
@@ -1350,6 +1353,10 @@ static void uwbRangingRxTask(void *parameters) {
 
       processRangingMessage(&rxPacketCache);
       topologySensing(&rxPacketCache.rangingMessage);
+
+      if (rxPacketCache.rangingMessage.header.srcAddress == 0) {
+        masterPeriod = rxPacketCache.rangingMessage.header.period;
+      }
 
       #ifdef ENABLE_RANGING_STAT
       statUpdateRX(&rxPacketCache.rangingMessage);

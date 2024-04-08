@@ -16,7 +16,7 @@
 #define ENABLE_RANGING_STAT
 
 /* Ranging Constants */
-#define RANGING_PERIOD 100 // default in 200ms
+#define RANGING_PERIOD 150 // default in 200ms
 #define RANGING_PERIOD_MIN 50 // default 50ms
 #define RANGING_PERIOD_MAX 500 // default 500ms
 
@@ -64,6 +64,7 @@ typedef struct {
   short velocity; // 2 byte cm/s
   uint16_t msgLength; // 2 byte
   uint16_t filter; // 16 bits bloom filter
+  uint16_t period;
 } __attribute__((packed)) Ranging_Message_Header_t; // 10 byte + 10 byte * MAX_Tr_UNIT
 
 /* Ranging Message */
