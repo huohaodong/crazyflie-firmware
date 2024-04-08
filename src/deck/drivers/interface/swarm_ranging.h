@@ -16,22 +16,22 @@
 #define ENABLE_RANGING_STAT
 
 /* Ranging Constants */
-#define RANGING_PERIOD 200 // default in 200ms
+#define RANGING_PERIOD 100 // default in 200ms
 #define RANGING_PERIOD_MIN 50 // default 50ms
 #define RANGING_PERIOD_MAX 500 // default 500ms
 
 /* Queue Constants */
-#define RANGING_RX_QUEUE_SIZE 5
+#define RANGING_RX_QUEUE_SIZE 10
 #define RANGING_RX_QUEUE_ITEM_SIZE sizeof(Ranging_Message_With_Timestamp_t)
 
 /* Ranging Struct Constants */
 #define RANGING_MESSAGE_SIZE_MAX UWB_PAYLOAD_SIZE_MAX
 #define RANGING_MESSAGE_PAYLOAD_SIZE_MAX (RANGING_MESSAGE_SIZE_MAX - sizeof(Ranging_Message_Header_t))
-#define RANGING_MAX_Tr_UNIT 3
+#define RANGING_MAX_Tr_UNIT 1
 #define RANGING_MAX_BODY_UNIT (RANGING_MESSAGE_PAYLOAD_SIZE_MAX / sizeof(Body_Unit_t))
 #define RANGING_TABLE_SIZE_MAX 20 // default up to 20 one-hop neighbors
 #define RANGING_TABLE_HOLD_TIME (6 * RANGING_PERIOD_MAX)
-#define Tr_Rr_BUFFER_POOL_SIZE 3
+#define Tr_Rr_BUFFER_POOL_SIZE 1
 #define Tf_BUFFER_POOL_SIZE (2 * RANGING_PERIOD_MAX / RANGING_PERIOD_MIN)
 
 /* Topology Sensing */

@@ -80,7 +80,9 @@ uint16_t statLastRecvSeq[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MA
 double statLossRate[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0.0};
 uint32_t statTotalLossCount = 0;
 double statTotalLossRate = 0.0;
+static TimerHandle_t statTimer;
 #endif
+
 
 static void printRangingStat() {
   DEBUG_PRINT("totalSend\t totalRecv\t totalLossRate\t RangingCount\t RangingSuccess\t\n");
@@ -109,7 +111,7 @@ static void statUpdateTX(Ranging_Message_t *rangingMessage) {
     UWB_Address_t neighborAddress = rangingMessage->bodyUnits[i].address;
     statSendCount[neighborAddress]++;
   }
-  printRangingStat();
+//  printRangingStat();
 }
 
 static void statUpdateRX(Ranging_Message_t *rangingMessage) {
@@ -135,7 +137,11 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
   statLossRate[neighborAddress] =
       statLossCount[neighborAddress] * 1.0 / (statLastRecvSeq[neighborAddress] - statFirstRecvSeq[neighborAddress] + 1);
   statTotalLossRate = statTotalLossCount * 1.0 / statTotalRecvCount;
-  printNeighborStat(rangingMessage->header.srcAddress);
+//  printNeighborStat(rangingMessage->header.srcAddress);
+}
+
+static void statTimerCallback(TimerHandle_t timer) {
+  printRangingStat();
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
@@ -833,12 +839,12 @@ static int16_t computeDistance(Timestamp_Tuple_t Tp, Timestamp_Tuple_t Rp,
   bool isErrorOccurred = false;
 
   if (Tp.seqNumber != Rp.seqNumber || Tr.seqNumber != Rr.seqNumber || Tf.seqNumber != Rf.seqNumber) {
-    DEBUG_PRINT("Ranging Error: sequence number mismatch\n");
+//    DEBUG_PRINT("Ranging Error: sequence number mismatch\n");
     isErrorOccurred = true;
   }
 
   if (Tp.seqNumber >= Tf.seqNumber || Rp.seqNumber >= Rf.seqNumber) {
-    DEBUG_PRINT("Ranging Error: sequence number out of order\n");
+//    DEBUG_PRINT("Ranging Error: sequence number out of order\n");
     isErrorOccurred = true;
   }
 
@@ -853,12 +859,12 @@ static int16_t computeDistance(Timestamp_Tuple_t Tp, Timestamp_Tuple_t Rp,
   int16_t distance = (int16_t) t * 0.4691763978616;
 
   if (distance < 0) {
-    DEBUG_PRINT("Ranging Error: distance < 0\n");
+//    DEBUG_PRINT("Ranging Error: distance < 0\n");
     isErrorOccurred = true;
   }
 
   if (distance > 1000) {
-    DEBUG_PRINT("Ranging Error: distance > 1000\n");
+//    DEBUG_PRINT("Ranging Error: distance > 1000\n");
     isErrorOccurred = true;
   }
 
@@ -1391,14 +1397,22 @@ void rangingInit() {
                                           pdTRUE,
                                           (void *) 0,
                                           neighborSetClearExpireTimerCallback);
-  xTimerStart(neighborSetEvictionTimer, M2T(0));
+//  xTimerStart(neighborSetEvictionTimer, M2T(0));
   rangingTableSetInit(&rangingTableSet);
   rangingTableSetEvictionTimer = xTimerCreate("rangingTableSetEvictionTimer",
                                               M2T(RANGING_TABLE_HOLD_TIME / 2),
                                               pdTRUE,
                                               (void *) 0,
                                               rangingTableSetClearExpireTimerCallback);
-  xTimerStart(rangingTableSetEvictionTimer, M2T(0));
+//  xTimerStart(rangingTableSetEvictionTimer, M2T(0));
+#ifdef ENABLE_RANGING_STAT
+  statTimer = xTimerCreate("neighborSetEvictionTimer",
+                           M2T(10 * 1000),
+                           pdTRUE,
+                           (void *) 0,
+                           statTimerCallback);
+  xTimerStart(statTimer, M2T(0));
+#endif
   TfBufferMutex = xSemaphoreCreateMutex();
 
   listener.type = UWB_RANGING_MESSAGE;
@@ -1428,4 +1442,9 @@ LOG_GROUP_START(Ranging)
         LOG_ADD(LOG_INT16, distTo8, distanceTowards + 8)
         LOG_ADD(LOG_INT16, distTo9, distanceTowards + 9)
         LOG_ADD(LOG_INT16, distTo10, distanceTowards + 10)
+        LOG_ADD(LOG_FLOAT, lossRate, &statLossRate)
+        LOG_ADD(LOG_UINT32, sendCount, &statTotalSendCount)
+        LOG_ADD(LOG_UINT32, recvCount, &statTotalRecvCount)
+        LOG_ADD(LOG_UINT32, rc, &statTotalRangingCount)
+        LOG_ADD(LOG_UINT32, rsc, &statTotalRangingSuccessCount)
 LOG_GROUP_STOP(Ranging)
