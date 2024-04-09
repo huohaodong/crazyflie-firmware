@@ -146,8 +146,10 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
 
 static void statTimerCallback(TimerHandle_t timer) {
 //  printRangingStat();
-  UWB_Address_t neighborAddress = rangingTableSet.tables[0].neighborAddress;
-  DEBUG_PRINT("%d %f \n", distanceTowards[neighborAddress], distanceLighthouse[neighborAddress]);
+  if (rangingTableSet.size > 0) {
+    UWB_Address_t neighborAddress = rangingTableSet.tables[0].neighborAddress;
+    DEBUG_PRINT("%d %f \n", distanceTowards[neighborAddress], distanceLighthouse[neighborAddress]);
+  }
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
