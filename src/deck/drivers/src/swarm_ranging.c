@@ -38,6 +38,7 @@ static Timestamp_Tuple_t TfBuffer[Tf_BUFFER_POOL_SIZE] = {0};
 static SemaphoreHandle_t TfBufferMutex;
 static int rangingSeqNumber = 0;
 static logVarId_t idVelocityX, idVelocityY, idVelocityZ;
+static logVarId_t idPositionX, idPositionY, idPositionZ;
 static float velocity;
 static Ranging_Table_t EMPTY_RANGING_TABLE = {
     .neighborAddress = UWB_DEST_EMPTY,
@@ -64,6 +65,7 @@ static Ranging_Table_t EMPTY_RANGING_TABLE = {
 };
 
 int16_t distanceTowards[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
+float distanceLighthouse[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
 
 #ifdef ENABLE_RANGING_STAT
 uint32_t statTotalSendCount = 0;
@@ -834,6 +836,17 @@ void printNeighborSet(Neighbor_Set_t *set) {
   }
 }
 
+
+static float computeLighthouseDistance(float neighborX, float neighborY, float neighborZ){
+  float positionX = logGetFloat(idPositionX);
+  float positionY = logGetFloat(idPositionY);
+  float positionZ = logGetFloat(idPositionZ);
+  // DEBUG_PRINT("positionX = %f, positionY = %f, positionZ = %f\n", positionX, positionY, positionZ);
+  // DEBUG_PRINT("neighborX = %f, neighborY = %f, neighborZ = %f\n", neighborX, neighborY, neighborZ);
+  // DEBUG_PRINT("distance = %f\n", sqrt(pow(positionX - neighborX, 2) + pow(positionY - neighborY, 2) + pow(positionZ - neighborZ, 2)));
+  return sqrt(pow(positionX - neighborX, 2) + pow(positionY - neighborY, 2) + pow(positionZ - neighborZ, 2));
+}
+
 static int16_t computeDistance(Timestamp_Tuple_t Tp, Timestamp_Tuple_t Rp,
                                Timestamp_Tuple_t Tr, Timestamp_Tuple_t Rr,
                                Timestamp_Tuple_t Tf, Timestamp_Tuple_t Rf) {
@@ -1049,6 +1062,8 @@ static void S4_RX_Rf(Ranging_Table_t *rangingTable) {
   if (distance > 0) {
     rangingTable->distance = distance;
     setDistance(rangingTable->neighborAddress, distance);
+    DEBUG_PRINT("neigh:%d:calulated dist = %d, lighthouse dist = %f\n",rangingTable->neighborAddress, distance,distanceLighthouse[rangingTable->neighborAddress]);
+
   } else {
 //    DEBUG_PRINT("distance is not updated since some error occurs\n");
   }
@@ -1129,7 +1144,8 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
       neighborIndex = rangingTableSetSearchTable(&rangingTableSet, neighborAddress);
     }
   }
-
+  // DEBUG_PRINT("neighborAddress = %d\n", neighborAddress);
+  distanceLighthouse[neighborAddress] = computeLighthouseDistance(rangingMessage->header.X, rangingMessage->header.Y, rangingMessage->header.Z);
   Ranging_Table_t *neighborRangingTable = &rangingTableSet.tables[neighborIndex];
   /* Update Re */
   neighborRangingTable->Re.timestamp = rangingMessageWithTimestamp->rxTime;
@@ -1291,8 +1307,17 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
   float velocityY = logGetFloat(idVelocityY);
   float velocityZ = logGetFloat(idVelocityZ);
   velocity = sqrt(pow(velocityX, 2) + pow(velocityY, 2) + pow(velocityZ, 2));
-  /* velocity in cm/s */
   rangingMessage->header.velocity = (short) (velocity * 100);
+  /* velocity in cm/s */
+
+  float positionX = logGetFloat(idPositionX);
+  float positionY = logGetFloat(idPositionY);
+  float positionZ = logGetFloat(idPositionZ);
+  // DEBUG_PRINT("generateRangingMessage: position = (%f, %f, %f)\n", positionX, positionY, positionZ);
+  rangingMessage->header.X = positionX;
+  rangingMessage->header.Y = positionY;
+  rangingMessage->header.Y = positionZ;
+  
 //  DEBUG_PRINT("generateRangingMessage: ranging message size = %u with %u body units.\n",
 //              rangingMessage->header.msgLength,
 //              bodyUnitNumber
@@ -1311,6 +1336,10 @@ static void uwbRangingTxTask(void *parameters) {
   idVelocityX = logGetVarId("stateEstimate", "vx");
   idVelocityY = logGetVarId("stateEstimate", "vy");
   idVelocityZ = logGetVarId("stateEstimate", "vz");
+
+  idPositionX = logGetVarId("stateEstimate", "x");
+  idPositionY = logGetVarId("stateEstimate", "y");
+  idPositionZ = logGetVarId("stateEstimate", "z");
 
   UWB_Packet_t txPacketCache;
   txPacketCache.header.srcAddress = uwbGetAddress();

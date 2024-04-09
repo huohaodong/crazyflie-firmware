@@ -64,6 +64,9 @@ typedef struct {
   short velocity; // 2 byte cm/s
   uint16_t msgLength; // 2 byte
   uint16_t filter; // 16 bits bloom filter
+  float X;
+  float Y;
+  float Z;
 } __attribute__((packed)) Ranging_Message_Header_t; // 10 byte + 10 byte * MAX_Tr_UNIT
 
 /* Ranging Message */
