@@ -145,7 +145,9 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
 }
 
 static void statTimerCallback(TimerHandle_t timer) {
-  printRangingStat();
+//  printRangingStat();
+  UWB_Address_t neighborAddress = rangingTableSet.tables[0].neighborAddress;
+  DEBUG_PRINT("%d %f \n", distanceTowards[neighborAddress], distanceLighthouse[neighborAddress]);
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
@@ -1062,8 +1064,6 @@ static void S4_RX_Rf(Ranging_Table_t *rangingTable) {
   if (distance > 0) {
     rangingTable->distance = distance;
     setDistance(rangingTable->neighborAddress, distance);
-    DEBUG_PRINT("neigh:%d:calulated dist = %d, lighthouse dist = %f\n",rangingTable->neighborAddress, distance,distanceLighthouse[rangingTable->neighborAddress]);
-
   } else {
 //    DEBUG_PRINT("distance is not updated since some error occurs\n");
   }
@@ -1438,7 +1438,7 @@ void rangingInit() {
 //  xTimerStart(rangingTableSetEvictionTimer, M2T(0));
 #ifdef ENABLE_RANGING_STAT
   statTimer = xTimerCreate("neighborSetEvictionTimer",
-                           M2T(10 * 1000),
+                           M2T(100),
                            pdTRUE,
                            (void *) 0,
                            statTimerCallback);
