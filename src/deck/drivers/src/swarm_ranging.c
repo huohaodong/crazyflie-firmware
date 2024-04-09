@@ -1352,7 +1352,7 @@ static void uwbRangingRxTask(void *parameters) {
       xSemaphoreTake(neighborSet.mu, portMAX_DELAY);
 
       processRangingMessage(&rxPacketCache);
-      topologySensing(&rxPacketCache.rangingMessage);
+//      topologySensing(&rxPacketCache.rangingMessage);
 
       if (rxPacketCache.rangingMessage.header.srcAddress == 0) {
         masterPeriod = rxPacketCache.rangingMessage.header.period;
