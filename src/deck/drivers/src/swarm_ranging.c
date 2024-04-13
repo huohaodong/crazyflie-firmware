@@ -86,7 +86,6 @@ static TimerHandle_t statTimer;
 float lossRateF = 0.0f;
 #endif
 
-
 static void printRangingStat() {
   DEBUG_PRINT("totalSend\t totalRecv\t totalLossRate\t RangingCount\t RangingSuccess\t\n");
   DEBUG_PRINT("%lu\t %lu\t %.2f\t %lu\t %lu\t\n",
@@ -120,7 +119,8 @@ static void statUpdateTX(Ranging_Message_t *rangingMessage) {
 static void statUpdateRX(Ranging_Message_t *rangingMessage) {
   statTotalRecvCount++;
   UWB_Address_t neighborAddress = rangingMessage->header.srcAddress;
-  if (statLastRecvSeq[neighborAddress] >= rangingMessage->header.msgSequence || statFirstRecvSeq[neighborAddress] == 0) {
+  if (statLastRecvSeq[neighborAddress] >= rangingMessage->header.msgSequence
+      || statFirstRecvSeq[neighborAddress] == 0) {
     /* Sequence number wrap-around or this neighbor just have restarted, reset corresponding stat */
     statRecvCount[neighborAddress] = 1;
     statSendCount[neighborAddress] = 0;
@@ -146,10 +146,15 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
 
 static void statTimerCallback(TimerHandle_t timer) {
 //  printRangingStat();
-  if (rangingTableSet.size > 0) {
-    UWB_Address_t neighborAddress = rangingTableSet.tables[0].neighborAddress;
-    DEBUG_PRINT("%d %f \n", distanceTowards[neighborAddress], distanceLighthouse[neighborAddress]);
+  xSemaphoreTake(rangingTableSet.mu, portMAX_DELAY);
+  for (int i = 0; i < rangingTableSet.size; i++) {
+    UWB_Address_t neighborAddress = rangingTableSet.tables[i].neighborAddress;
+    DEBUG_PRINT("neighbor: %u, distance = %d, lighthouse = %f\n",
+                neighborAddress,
+                distanceTowards[neighborAddress],
+                (double) distanceLighthouse[neighborAddress]);
   }
+  xSemaphoreGive(rangingTableSet.mu);
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
@@ -840,8 +845,7 @@ void printNeighborSet(Neighbor_Set_t *set) {
   }
 }
 
-
-static float computeLighthouseDistance(float neighborX, float neighborY, float neighborZ){
+static float computeLighthouseDistance(float neighborX, float neighborY, float neighborZ) {
   float positionX = logGetFloat(idPositionX);
   float positionY = logGetFloat(idPositionY);
   float positionZ = logGetFloat(idPositionZ);
@@ -1319,7 +1323,7 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
   rangingMessage->header.X = positionX;
   rangingMessage->header.Y = positionY;
   rangingMessage->header.Y = positionZ;
-  
+
 //  DEBUG_PRINT("generateRangingMessage: ranging message size = %u with %u body units.\n",
 //              rangingMessage->header.msgLength,
 //              bodyUnitNumber
