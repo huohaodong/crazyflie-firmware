@@ -41,6 +41,7 @@
 #include "param.h"
 #include "pm.h"
 #include "log.h"
+#include "ledring.h"
 
 #ifdef CONFIG_DECK_LIGHTHOUSE
 #include "pulse_processor.h"
@@ -272,6 +273,12 @@ static void solidColorEffect(uint8_t buffer[][3], bool reset)
     buffer[i][1] = solidGreen*brightness;
     buffer[i][2] = solidBlue*brightness;
   }
+}
+
+void ledSetSolid(uint8_t r, uint8_t g, uint8_t b) {
+  solidRed = r;
+  solidGreen = g;
+  solidBlue = b;
 }
 
 static void virtualMemEffect(uint8_t buffer[][3], bool reset)
