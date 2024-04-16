@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "FreeRTOS.h"
 #include "timers.h"
 #include "debug.h"
@@ -8,6 +9,7 @@
 #include "raft.h"
 #include "log.h"
 #include "led.h"
+#include "swarm_ranging.h"
 
 #ifndef RAFT_DEBUG_ENABLE
 #undef DEBUG_PRINT
@@ -41,8 +43,8 @@ static Raft_Config_t EMPTY_CONFIG = {
     .clusterId = RAFT_CLUSTER_ID_EMPTY,
     .clusterSize = 0
 };
-
-static logVarId_t logBatteryLevel;
+static uint8_t lowerCount = 0;
+static uint8_t threshold = 10;
 
 static bool raftConfigAdd(UWB_Address_t node) {
   raftNode.config.previousConfig = raftNode.config.currentConfig;
@@ -58,6 +60,7 @@ static bool raftConfigAdd(UWB_Address_t node) {
   raftNode.peerVote[node] = false;
   raftNode.nextIndex[node] = raftNode.log.items[raftNode.log.size - 1].index + 1;
   raftNode.matchIndex[node] = 0;
+  raftNode.peerStability[node] = 0.0f;
   DEBUG_PRINT("raftConfigAdd: %u add node %u to cluster %u.\n", raftNode.me, node, raftNode.config.clusterId);
   return true;
 }
@@ -76,12 +79,31 @@ static bool raftConfigRemove(UWB_Address_t node) {
   raftNode.peerVote[node] = false;
   raftNode.nextIndex[node] = raftNode.log.items[raftNode.log.size - 1].index + 1;
   raftNode.matchIndex[node] = 0;
+  raftNode.peerStability[node] = 0.0f;
   DEBUG_PRINT("raftConfigRemove: %u remove node %u in cluster %u.\n", raftNode.me, node, raftNode.config.clusterId);
   return true;
 }
 
 static bool raftConfigHasPeer(UWB_Address_t peer) {
   return (raftNode.config.currentConfig & (1 << peer));
+}
+
+static logVarId_t logBatteryLevel;
+
+static float getCurrentStabilityMetric() {
+  uint8_t batteryLevel = logGetUint(logBatteryLevel);
+  Neighbor_Set_t *neighborSet = getGlobalNeighborSet();
+  float centrality = neighborSet->oneHop.size + neighborSet->twoHop.size;
+  float distanceSum = 0;
+  for (UWB_Address_t neighborAddress = 0; neighborAddress <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; neighborAddress++) {
+    if (!raftConfigHasPeer(neighborAddress) || getDistance(neighborAddress) <= 0) {
+      continue;
+    }
+    distanceSum += log(getDistance(neighborAddress) + 1);
+  }
+  centrality = centrality / distanceSum;
+  return centrality;
+//  return batteryLevel / 100 * 0.3f + centrality * 0.7f;
 }
 
 static uint16_t getNextRequestId() {
@@ -179,6 +201,7 @@ static void raftLogApply(Raft_Log_t *raftLog, uint16_t logItemIndex) {
           raftNode.peerVote[i] = false;
           raftNode.nextIndex[i] = raftNode.log.items[raftNode.log.size - 1].index + 1;
           raftNode.matchIndex[i] = 0;
+          raftNode.peerStability[i] = 0.0f;
         }
         raftNode.config = EMPTY_CONFIG;
       }
@@ -251,11 +274,13 @@ static void convertToFollower(Raft_Node_t *node) {
   node->currentState = RAFT_STATE_FOLLOWER;
   node->currentLeader = UWB_DEST_EMPTY;
   node->voteFor = RAFT_VOTE_FOR_NO_ONE;
+  lowerCount = 0;
   for (int i = 0; i <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
     node->peerVote[i] = false;
+    node->peerStability[i] = 0.0f;
   }
   node->lastHeartbeatTime = xTaskGetTickCount();
-  ledSet(LED_GREEN_L, true);
+  ledSet(LED_GREEN_L, false);
   ledSet(LED_RED_L, false);
   ledSet(LED_GREEN_R, false);
   ledSet(LED_RED_R, false);
@@ -266,8 +291,10 @@ static void convertToFollower(Raft_Node_t *node) {
 static void convertToLeader(Raft_Node_t *node) {
   node->currentState = RAFT_STATE_LEADER;
   node->currentLeader = node->me;
+  lowerCount = 0;
   for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     node->peerVote[peer] = false;
+    node->peerStability[peer] = 0.0f;
   }
   /* Append an empty log entry (NO_OPS) for implicitly commit preceding logs. */
   Raft_Log_Command_t noOpsLog = {
@@ -278,11 +305,11 @@ static void convertToLeader(Raft_Node_t *node) {
   };
   raftLogAppend(&node->log, node->currentTerm, &noOpsLog);
   ledSet(LED_GREEN_L, false);
-  ledSet(LED_RED_L, true);
+  ledSet(LED_RED_L, false);
   ledSet(LED_GREEN_R, false);
   ledSet(LED_RED_R, false);
   ledSet(LED_BLUE_L, true);
-  ledSet(LED_BLUE_NRF, false);
+  ledSet(LED_BLUE_NRF, true);
 }
 
 static void convertToCandidate(Raft_Node_t *node) {
@@ -291,12 +318,14 @@ static void convertToCandidate(Raft_Node_t *node) {
   node->currentLeader = UWB_DEST_EMPTY;
   for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     node->peerVote[peer] = false;
+    node->peerStability[peer] = 0.0f;
   }
   node->voteFor = raftNode.me;
   node->lastHeartbeatTime = xTaskGetTickCount();
+  lowerCount = 0;
   ledSet(LED_GREEN_L, false);
   ledSet(LED_RED_L, false);
-  ledSet(LED_GREEN_R, true);
+  ledSet(LED_GREEN_R, false);
   ledSet(LED_RED_R, false);
   ledSet(LED_BLUE_L, false);
   ledSet(LED_BLUE_NRF, false);
@@ -310,16 +339,36 @@ static void raftApplyLog() {
   }
 }
 
+static bool raftStabilityCheck() {
+  float currentStability = getCurrentStabilityMetric();
+  uint8_t count = 0;
+  for (UWB_Address_t peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+    if (raftNode.peerStability[peer] > currentStability) {
+      count++;
+    }
+  }
+  if (count > raftNode.config.clusterSize / 2) {
+    DEBUG_PRINT("raftStabilityCheck: %u stability = %f, lower than half of my followers.\n", raftNode.me, currentStability);
+    return false;
+  }
+  return true;
+}
+
 static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
   printRaftConfig(raftNode.config);
   printRaftLog(&raftNode.log);
   if (raftNode.currentState == RAFT_STATE_LEADER) {
-    for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
-      if (peer != raftNode.me && raftConfigHasPeer(peer) && raftConfigHasPeer(peer)) {
-        raftSendAppendEntries(peer);
-        vTaskDelay(M2T(5));
+    if (!raftStabilityCheck()) {
+      lowerCount++;
+    }
+    if (raftNode.commitIndex == raftNode.log.items[raftNode.log.size - 1].index || lowerCount < threshold) {
+      for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+        if (peer != raftNode.me && raftConfigHasPeer(peer) && raftConfigHasPeer(peer)) {
+          raftSendAppendEntries(peer);
+          vTaskDelay(M2T(5));
+        }
       }
     }
   }
@@ -641,6 +690,7 @@ void raftProcessRequestVoteReply(UWB_Address_t peerAddress, Raft_Request_Vote_Re
         if (peerNode != raftNode.me && raftConfigHasPeer(peerNode)) {
           raftNode.nextIndex[peerNode] = raftNode.log.size;
           raftNode.matchIndex[peerNode] = 0;
+          raftNode.peerStability[peerNode] = 0.0f;
           raftSendAppendEntries(peerNode);
         }
       }
@@ -784,12 +834,14 @@ void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool s
   reply->term = term;
   reply->success = success;
   reply->nextIndex = nextIndex;
-  DEBUG_PRINT("raftSendAppendEntriesReply: %u send append entries reply to %u, term = %u, success = %d, nextIndex = %u.\n",
-              raftNode.me,
-              peerAddress,
-              term,
-              success,
-              nextIndex);
+  reply->stability = getCurrentStabilityMetric();
+  DEBUG_PRINT("raftSendAppendEntriesReply: %u send append entries reply to %u, term = %u, success = %d, nextIndex = %u, stability = %f.\n",
+      raftNode.me,
+      peerAddress,
+      term,
+      success,
+      nextIndex,
+      reply->stability);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 
@@ -818,6 +870,7 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
     DEBUG_PRINT("raftProcessAppendEntriesReply: %u is not a leader now, ignore.\n", raftNode.me);
     return;
   }
+  raftNode.peerStability[peerAddress] = reply->stability;
   if (reply->success) {
     /* If successful: update nextIndex and matchIndex for follower. */
     raftNode.nextIndex[peerAddress] = MAX(raftNode.nextIndex[peerAddress], reply->nextIndex);
@@ -1009,7 +1062,7 @@ void printRaftConfig(Raft_Config_t config) {
 }
 
 void printRaftLog(Raft_Log_t *raftLog) {
-  DEBUG_PRINT("term\t index\t clientId\t reqId\t type\t commit\t \n");
+  DEBUG_PRINT("term\t index\t clientId\t reqId\t type\t committed\t \n");
   for (int i = 0; i < raftLog->size; i++) {
     DEBUG_PRINT("%u\t %u\t %u\t %u\t %u\t %u\t \n",
                 raftLog->items[i].term,
@@ -1017,7 +1070,7 @@ void printRaftLog(Raft_Log_t *raftLog) {
                 raftLog->items[i].command.clientId,
                 raftLog->items[i].command.requestId,
                 raftLog->items[i].command.type,
-                raftNode.commitIndex);
+                raftLog->items[i].index <= raftNode.commitIndex);
   }
 }
 

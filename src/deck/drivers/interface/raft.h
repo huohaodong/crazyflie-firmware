@@ -5,7 +5,7 @@
 #include "semphr.h"
 #include "routing.h"
 
-//#define RAFT_DEBUG_ENABLE
+#define RAFT_DEBUG_ENABLE
 
 /* Queue Constants */
 #define RAFT_RX_QUEUE_SIZE 5
@@ -17,7 +17,7 @@
 #define RAFT_LOG_SIZE_MAX 50
 #define RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX 31
 #define RAFT_VOTE_FOR_NO_ONE UWB_DEST_EMPTY
-#define RAFT_HEARTBEAT_INTERVAL 1000 // default 150ms
+#define RAFT_HEARTBEAT_INTERVAL 150 // default 150ms
 #define RAFT_ELECTION_TIMEOUT (5 * RAFT_HEARTBEAT_INTERVAL)
 #define RAFT_LOG_APPLY_INTERVAL 50 // default 50ms
 #define RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX 15 // TODO: fine tuning
@@ -91,6 +91,7 @@ typedef struct {
   Raft_Config_t config; /* peer nodes in current raft cluster configuration */
   /* State for client */
   uint16_t latestAppliedRequestId[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX + 1]; /* latest request id applied to the state machine for each client */
+  float peerStability[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX + 1];
 } Raft_Node_t;
 
 typedef enum {
@@ -135,6 +136,7 @@ typedef struct {
   /* Since we don't have rpc mechanism here, to help leader update nextIndex and matchIndex, follower should tell
    * leader it's replication progress. */
   uint16_t nextIndex; /* 0 represents null */
+  float stability; /* stability metric */
 } __attribute__((packed)) Raft_Append_Entries_Reply_t;
 
 typedef struct {
