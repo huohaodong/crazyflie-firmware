@@ -6,7 +6,6 @@
 #include "system.h"
 #include "param.h"
 #include "raft.h"
-#include "ledring.h"
 
 #ifndef RAFT_DEBUG_ENABLE
 #undef DEBUG_PRINT
@@ -252,7 +251,12 @@ static void convertToFollower(Raft_Node_t *node) {
     node->peerVote[i] = false;
   }
   node->lastHeartbeatTime = xTaskGetTickCount();
-  ledSetSolid(0, 0, 0);
+  ledSet(LED_GREEN_L, true);
+  ledSet(LED_RED_L, false);
+  ledSet(LED_GREEN_R, false);
+  ledSet(LED_RED_R, false);
+  ledSet(LED_BLUE_L, false);
+  ledSet(LED_BLUE_NRF, false);
 }
 
 static void convertToLeader(Raft_Node_t *node) {
@@ -269,7 +273,12 @@ static void convertToLeader(Raft_Node_t *node) {
       // TODO: init empty payload
   };
   raftLogAppend(&node->log, node->currentTerm, &noOpsLog);
-  ledSetSolid(20, 0, 0);
+  ledSet(LED_GREEN_L, false);
+  ledSet(LED_RED_L, true);
+  ledSet(LED_GREEN_R, false);
+  ledSet(LED_RED_R, false);
+  ledSet(LED_BLUE_L, true);
+  ledSet(LED_BLUE_NRF, false);
 }
 
 static void convertToCandidate(Raft_Node_t *node) {
@@ -281,7 +290,12 @@ static void convertToCandidate(Raft_Node_t *node) {
   }
   node->voteFor = raftNode.me;
   node->lastHeartbeatTime = xTaskGetTickCount();
-  ledSetSolid(0, 0, 0);
+  ledSet(LED_GREEN_L, false);
+  ledSet(LED_RED_L, false);
+  ledSet(LED_GREEN_R, true);
+  ledSet(LED_RED_R, false);
+  ledSet(LED_BLUE_L, false);
+  ledSet(LED_BLUE_NRF, false);
 }
 
 static void raftApplyLog() {
