@@ -6,6 +6,8 @@
 #include "system.h"
 #include "param.h"
 #include "raft.h"
+#include "log.h"
+#include "led.h"
 
 #ifndef RAFT_DEBUG_ENABLE
 #undef DEBUG_PRINT
@@ -39,6 +41,8 @@ static Raft_Config_t EMPTY_CONFIG = {
     .clusterId = RAFT_CLUSTER_ID_EMPTY,
     .clusterSize = 0
 };
+
+static logVarId_t logBatteryLevel;
 
 static bool raftConfigAdd(UWB_Address_t node) {
   raftNode.config.previousConfig = raftNode.config.currentConfig;
@@ -480,6 +484,8 @@ void raftInit() {
   }
   DEBUG_PRINT("raftInit: node id = %u, cluster id = %u.\n", raftNode.me, raftClusterId);
   printRaftConfig(raftNode.config);
+
+  logBatteryLevel = logGetVarId("pm", "batteryLevel");
 
   raftHeartbeatTimer = xTimerCreate("raftHeartbeatTimer",
                                    M2T(RAFT_HEARTBEAT_INTERVAL),
