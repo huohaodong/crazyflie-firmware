@@ -6,6 +6,7 @@
 #include "system.h"
 #include "param.h"
 #include "raft.h"
+#include "ledring.h"
 
 #ifndef RAFT_DEBUG_ENABLE
 #undef DEBUG_PRINT
@@ -251,6 +252,7 @@ static void convertToFollower(Raft_Node_t *node) {
     node->peerVote[i] = false;
   }
   node->lastHeartbeatTime = xTaskGetTickCount();
+  ledSetSolid(0, 0, 0);
 }
 
 static void convertToLeader(Raft_Node_t *node) {
@@ -267,6 +269,7 @@ static void convertToLeader(Raft_Node_t *node) {
       // TODO: init empty payload
   };
   raftLogAppend(&node->log, node->currentTerm, &noOpsLog);
+  ledSetSolid(20, 0, 0);
 }
 
 static void convertToCandidate(Raft_Node_t *node) {
@@ -278,6 +281,7 @@ static void convertToCandidate(Raft_Node_t *node) {
   }
   node->voteFor = raftNode.me;
   node->lastHeartbeatTime = xTaskGetTickCount();
+  ledSetSolid(0, 0, 0);
 }
 
 static void raftApplyLog() {
@@ -455,8 +459,10 @@ void raftInit() {
   raftNode.lastHeartbeatTime = xTaskGetTickCount();
   raftNode.config = EMPTY_CONFIG;
   raftNode.config.clusterId = raftClusterId;
-  for (int i = 0; i <= 4; i++) {
-    raftConfigAdd(i);
+  for (int member = 0; member <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; member++) {
+    if (raftMembers & (1UL << member)) {
+      raftConfigAdd(member);
+    }
   }
   DEBUG_PRINT("raftInit: node id = %u, cluster id = %u.\n", raftNode.me, raftClusterId);
   printRaftConfig(raftNode.config);
@@ -1006,6 +1012,6 @@ void printRaftLogItem(Raft_Log_Item_t *item) {
 }
 
 PARAM_GROUP_START(RAFT)
-  PARAM_ADD_CORE(PARAM_UINT32 | PARAM_PERSISTENT, RAFT_CONFIG, &raftMembers)
-  PARAM_ADD_CORE(PARAM_UINT8 | PARAM_PERSISTENT, RAFT_CONFIG, &raftClusterId)
+  PARAM_ADD_CORE(PARAM_UINT32 | PARAM_PERSISTENT, RAFT_MEMBERS, &raftMembers)
+  PARAM_ADD_CORE(PARAM_UINT8 | PARAM_PERSISTENT, RAFT_CLUSTER_ID, &raftClusterId)
 PARAM_GROUP_STOP(RAFT)
