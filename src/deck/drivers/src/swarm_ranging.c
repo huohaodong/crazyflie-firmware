@@ -87,7 +87,7 @@ float lossRateF = 0.0f;
 
 static void printRangingStat() {
   DEBUG_PRINT("totalSend\t totalRecv\t totalLossRate\t RangingCount\t RangingSuccess\t\n");
-  DEBUG_PRINT("%u\t %u\t %.2f\t %u\t %u\t\n",
+  DEBUG_PRINT("%lu\t %lu\t %.2f\t %lu\t %lu\t\n",
               statTotalSendCount,
               statTotalRecvCount,
               statTotalLossRate,
@@ -97,7 +97,7 @@ static void printRangingStat() {
 
 static void printNeighborStat(UWB_Address_t neighborAddress) {
   DEBUG_PRINT("send\t recv\t lossRate\t RC\t RS\t of neighbor %u\n", neighborAddress);
-  DEBUG_PRINT("%u\t %u\t %.2f\t %u\t %u\t\n",
+  DEBUG_PRINT("%lu\t %lu\t %.2f\t %lu\t %lu\t\n",
               statSendCount[neighborAddress],
               statRecvCount[neighborAddress],
               statLossRate[neighborAddress],
@@ -144,6 +144,7 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
 
 static void statTimerCallback(TimerHandle_t timer) {
 //  printRangingStat();
+  printRoutingTable(getGlobalRoutingTable());
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
@@ -367,9 +368,9 @@ static int rangingTableSetClearExpire(Ranging_Table_Set_t *set) {
 
   for (int i = 0; i < rangingTableSet.size; i++) {
     if (rangingTableSet.tables[i].expirationTime <= curTime) {
-      DEBUG_PRINT("rangingTableSetClearExpire: Clean ranging table for neighbor %u that expire at %lu.\n",
-                  rangingTableSet.tables[i].neighborAddress,
-                  rangingTableSet.tables[i].expirationTime);
+//      DEBUG_PRINT("rangingTableSetClearExpire: Clean ranging table for neighbor %u that expire at %lu.\n",
+//                  rangingTableSet.tables[i].neighborAddress,
+//                  rangingTableSet.tables[i].expirationTime);
       setDistance(rangingTableSet.tables[i].neighborAddress, -1);
       rangingTableSet.tables[i] = EMPTY_RANGING_TABLE;
       evictionCount++;
@@ -1349,7 +1350,7 @@ static void uwbRangingRxTask(void *parameters) {
       xSemaphoreTake(neighborSet.mu, portMAX_DELAY);
 
       processRangingMessage(&rxPacketCache);
-//      topologySensing(&rxPacketCache.rangingMessage);
+      topologySensing(&rxPacketCache.rangingMessage);
 
       #ifdef ENABLE_RANGING_STAT
       statUpdateRX(&rxPacketCache.rangingMessage);
@@ -1409,7 +1410,7 @@ void rangingInit() {
   xTimerStart(rangingTableSetEvictionTimer, M2T(0));
 #ifdef ENABLE_RANGING_STAT
   statTimer = xTimerCreate("neighborSetEvictionTimer",
-                           M2T(10 * 1000),
+                           M2T(5 * 1000),
                            pdTRUE,
                            (void *) 0,
                            statTimerCallback);

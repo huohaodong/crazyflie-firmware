@@ -5,9 +5,9 @@
 #include "mac_802_15_4.h"
 #include "queue.h"
 
-//#define UWB_DEBUG_ENABLE
+#define UWB_DEBUG_ENABLE
 #define UWB_RANGING_ENABLE
-//#define UWB_ROUTING_ENABLE
+#define UWB_ROUTING_ENABLE
 //#define UWB_RAFT_ENABLE
 //#define UWB_FLOODING_ENABLE
 
