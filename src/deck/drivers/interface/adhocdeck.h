@@ -50,7 +50,7 @@ static dwt_txconfig_t uwbTxConfigOptions = {
 
 /* PHR configuration */
 static dwt_config_t uwbPhrConfig = {
-    5,            /* Channel number. */
+    9,            /* Channel number. */
     DWT_PLEN_128, /* Preamble length. Used in TX only. */
     DWT_PAC8,     /* Preamble acquisition chunk size. Used in RX only. */
     9,            /* TX preamble code. Used in TX only. */

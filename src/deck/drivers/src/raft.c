@@ -44,7 +44,7 @@ static Raft_Config_t EMPTY_CONFIG = {
     .clusterSize = 0
 };
 static uint8_t lowerCount = 0;
-static uint8_t threshold = 10;
+static uint8_t threshold = 5;
 
 static bool raftConfigAdd(UWB_Address_t node) {
   raftNode.config.previousConfig = raftNode.config.currentConfig;
@@ -354,18 +354,40 @@ static bool raftStabilityCheck() {
   return true;
 }
 
+static bool raftFullConsensusCheck() {
+  uint8_t count = 0;
+  for (UWB_Address_t peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+    if (raftConfigHasPeer(peer) && raftNode.commitIndex == raftNode.matchIndex[peer]) {
+      count++;
+    }
+  }
+  return count == raftNode.config.clusterSize;
+}
+
 static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
+//DEBUG_PRINT("leader = %u, my \n", );
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
   printRaftConfig(raftNode.config);
   printRaftLog(&raftNode.log);
+  DEBUG_PRINT("neighbor \t stability \t\n");
+  for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+    if (peer != raftNode.me && raftConfigHasPeer(peer)) {
+      DEBUG_PRINT("%u \t %.2f \t\n", peer, raftNode.peerStability[peer]);
+    }
+  }
+  DEBUG_PRINT("%u \t %.2f \t\n", raftNode.me, getCurrentStabilityMetric());
+  DEBUG_PRINT("\n");
   if (raftNode.currentState == RAFT_STATE_LEADER) {
     if (!raftStabilityCheck()) {
       lowerCount++;
     }
-    if (raftNode.commitIndex == raftNode.log.items[raftNode.log.size - 1].index || lowerCount < threshold) {
+    if (raftFullConsensusCheck()) {
+      DEBUG_PRINT("raftFullConsensusCheck\n");
+    }
+    if (!(raftFullConsensusCheck() && lowerCount >= threshold)) {
       for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
-        if (peer != raftNode.me && raftConfigHasPeer(peer) && raftConfigHasPeer(peer)) {
+        if (peer != raftNode.me && raftConfigHasPeer(peer)) {
           raftSendAppendEntries(peer);
           vTaskDelay(M2T(5));
         }
@@ -835,7 +857,7 @@ void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool s
   reply->success = success;
   reply->nextIndex = nextIndex;
   reply->stability = getCurrentStabilityMetric();
-  DEBUG_PRINT("raftSendAppendEntriesReply: %u send append entries reply to %u, term = %u, success = %d, nextIndex = %u, stability = %f.\n",
+  DEBUG_PRINT("raftSendAppendEntriesReply: %u send append entries reply to %u, term = %u, success = %d, nextIndex = %u, stability = %.2f.\n",
       raftNode.me,
       peerAddress,
       term,
