@@ -87,7 +87,7 @@ float lossRateF = 0.0f;
 
 static void printRangingStat() {
   DEBUG_PRINT("totalSend\t totalRecv\t totalLossRate\t RangingCount\t RangingSuccess\t\n");
-  DEBUG_PRINT("%lu\t %lu\t %.2f\t %lu\t %lu\t\n",
+  DEBUG_PRINT("%u\t %u\t %.2f\t %u\t %u\t\n",
               statTotalSendCount,
               statTotalRecvCount,
               statTotalLossRate,
@@ -97,7 +97,7 @@ static void printRangingStat() {
 
 static void printNeighborStat(UWB_Address_t neighborAddress) {
   DEBUG_PRINT("send\t recv\t lossRate\t RC\t RS\t of neighbor %u\n", neighborAddress);
-  DEBUG_PRINT("%lu\t %lu\t %.2f\t %lu\t %lu\t\n",
+  DEBUG_PRINT("%u\t %u\t %.2f\t %u\t %u\t\n",
               statSendCount[neighborAddress],
               statRecvCount[neighborAddress],
               statLossRate[neighborAddress],
@@ -143,7 +143,7 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
 }
 
 static void statTimerCallback(TimerHandle_t timer) {
-  printRangingStat();
+//  printRangingStat();
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
@@ -386,13 +386,13 @@ static void rangingTableSetClearExpireTimerCallback(TimerHandle_t timer) {
   xSemaphoreTake(rangingTableSet.mu, portMAX_DELAY);
 
   Time_t curTime = xTaskGetTickCount();
-  DEBUG_PRINT("rangingTableSetClearExpireTimerCallback: Trigger expiration timer at %lu.\n", curTime);
+//  DEBUG_PRINT("rangingTableSetClearExpireTimerCallback: Trigger expiration timer at %u.\n", curTime);
 
   int evictionCount = rangingTableSetClearExpire(&rangingTableSet);
   if (evictionCount > 0) {
-    DEBUG_PRINT("rangingTableSetClearExpireTimerCallback: Evict total %d ranging tables.\n", evictionCount);
+//    DEBUG_PRINT("rangingTableSetClearExpireTimerCallback: Evict total %d ranging tables.\n", evictionCount);
   } else {
-    DEBUG_PRINT("rangingTableSetClearExpireTimerCallback: Evict none.\n");
+//    DEBUG_PRINT("rangingTableSetClearExpireTimerCallback: Evict none.\n");
   }
 
   xSemaphoreGive(rangingTableSet.mu);
@@ -726,13 +726,13 @@ static void neighborSetClearExpireTimerCallback(TimerHandle_t timer) {
   xSemaphoreTake(neighborSet.mu, portMAX_DELAY);
 
   Time_t curTime = xTaskGetTickCount();
-  DEBUG_PRINT("neighborSetClearExpireTimerCallback: Trigger expiration timer at %lu.\n", curTime);
+//  DEBUG_PRINT("neighborSetClearExpireTimerCallback: Trigger expiration timer at %u.\n", curTime);
 
   int evictionCount = neighborSetClearExpire(&neighborSet);
   if (evictionCount > 0) {
-    DEBUG_PRINT("neighborSetClearExpireTimerCallback: Evict total %d neighbors.\n", evictionCount);
+//    DEBUG_PRINT("neighborSetClearExpireTimerCallback: Evict total %d neighbors.\n", evictionCount);
   } else {
-    DEBUG_PRINT("neighborSetClearExpireTimerCallback: Evict none.\n");
+//    DEBUG_PRINT("neighborSetClearExpireTimerCallback: Evict none.\n");
   }
 
   xSemaphoreGive(neighborSet.mu);
@@ -1399,14 +1399,14 @@ void rangingInit() {
                                           pdTRUE,
                                           (void *) 0,
                                           neighborSetClearExpireTimerCallback);
-//  xTimerStart(neighborSetEvictionTimer, M2T(0));
+  xTimerStart(neighborSetEvictionTimer, M2T(0));
   rangingTableSetInit(&rangingTableSet);
   rangingTableSetEvictionTimer = xTimerCreate("rangingTableSetEvictionTimer",
                                               M2T(RANGING_TABLE_HOLD_TIME / 2),
                                               pdTRUE,
                                               (void *) 0,
                                               rangingTableSetClearExpireTimerCallback);
-//  xTimerStart(rangingTableSetEvictionTimer, M2T(0));
+  xTimerStart(rangingTableSetEvictionTimer, M2T(0));
 #ifdef ENABLE_RANGING_STAT
   statTimer = xTimerCreate("neighborSetEvictionTimer",
                            M2T(10 * 1000),
