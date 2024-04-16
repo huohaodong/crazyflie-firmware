@@ -356,12 +356,16 @@ static bool raftStabilityCheck() {
 
 static bool raftFullConsensusCheck() {
   uint8_t count = 0;
+  DEBUG_PRINT("matchindex\tneighbor\t\n");
   for (UWB_Address_t peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
-    if (raftConfigHasPeer(peer) && raftNode.commitIndex == raftNode.matchIndex[peer]) {
-      count++;
+    if (raftConfigHasPeer(peer) && peer != raftNode.me) {
+      DEBUG_PRINT("%u\t%u\t\n", raftNode.matchIndex[peer], peer);
+      if (raftNode.commitIndex == raftNode.matchIndex[peer]) {
+        count++;
+      }
     }
   }
-  return count == raftNode.config.clusterSize;
+  return count == raftNode.config.clusterSize - 1;
 }
 
 static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
