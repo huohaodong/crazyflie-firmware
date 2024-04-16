@@ -44,7 +44,7 @@ static Raft_Config_t EMPTY_CONFIG = {
     .clusterSize = 0
 };
 static uint8_t lowerCount = 0;
-static uint8_t threshold = 5;
+static uint8_t threshold = 200;
 
 static bool raftConfigAdd(UWB_Address_t node) {
   raftNode.config.previousConfig = raftNode.config.currentConfig;
@@ -102,8 +102,8 @@ static float getCurrentStabilityMetric() {
     distanceSum += log(getDistance(neighborAddress) + 1);
   }
   centrality = centrality / distanceSum;
-  return centrality;
-//  return batteryLevel / 100 * 0.3f + centrality * 0.7f;
+//  return centrality;
+  return batteryLevel / 100 * 0.3f + centrality * 0.7f;
 }
 
 static uint16_t getNextRequestId() {
@@ -274,12 +274,12 @@ static void convertToFollower(Raft_Node_t *node) {
   node->currentState = RAFT_STATE_FOLLOWER;
   node->currentLeader = UWB_DEST_EMPTY;
   node->voteFor = RAFT_VOTE_FOR_NO_ONE;
-  lowerCount = 0;
+  lowerCount = 1;
   for (int i = 0; i <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
     node->peerVote[i] = false;
     node->peerStability[i] = 0.0f;
   }
-  node->lastHeartbeatTime = xTaskGetTickCount();
+  node->lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL + xTaskGetTickCount();
   ledSet(LED_GREEN_L, false);
   ledSet(LED_RED_L, false);
   ledSet(LED_GREEN_R, false);
@@ -291,10 +291,9 @@ static void convertToFollower(Raft_Node_t *node) {
 static void convertToLeader(Raft_Node_t *node) {
   node->currentState = RAFT_STATE_LEADER;
   node->currentLeader = node->me;
-  lowerCount = 0;
+  lowerCount = 2;
   for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     node->peerVote[peer] = false;
-    node->peerStability[peer] = 0.0f;
   }
   /* Append an empty log entry (NO_OPS) for implicitly commit preceding logs. */
   Raft_Log_Command_t noOpsLog = {
@@ -318,11 +317,10 @@ static void convertToCandidate(Raft_Node_t *node) {
   node->currentLeader = UWB_DEST_EMPTY;
   for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     node->peerVote[peer] = false;
-    node->peerStability[peer] = 0.0f;
   }
   node->voteFor = raftNode.me;
-  node->lastHeartbeatTime = xTaskGetTickCount();
-  lowerCount = 0;
+  node->lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL + xTaskGetTickCount() + RAFT_ELECTION_TIMEOUT;
+  lowerCount = 3;
   ledSet(LED_GREEN_L, false);
   ledSet(LED_RED_L, false);
   ledSet(LED_GREEN_R, false);
@@ -343,7 +341,7 @@ static bool raftStabilityCheck() {
   float currentStability = getCurrentStabilityMetric();
   uint8_t count = 0;
   for (UWB_Address_t peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
-    if (raftNode.peerStability[peer] > currentStability) {
+    if (raftConfigHasPeer(peer) && peer != raftNode.me && raftNode.peerStability[peer] > currentStability) {
       count++;
     }
   }
@@ -372,8 +370,10 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
 //DEBUG_PRINT("leader = %u, my \n", );
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
-  printRaftConfig(raftNode.config);
-  printRaftLog(&raftNode.log);
+//  printRaftConfig(raftNode.config);
+//  printRaftLog(&raftNode.log);
+  printRoutingTable(getGlobalRoutingTable());
+  DEBUG_PRINT("lowerCount = %u\n", lowerCount);
   DEBUG_PRINT("neighbor \t stability \t\n");
   for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     if (peer != raftNode.me && raftConfigHasPeer(peer)) {
@@ -389,7 +389,7 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
     if (raftFullConsensusCheck()) {
       DEBUG_PRINT("raftFullConsensusCheck\n");
     }
-    if (!(raftFullConsensusCheck() && lowerCount >= threshold)) {
+    if (raftFullConsensusCheck() || lowerCount < threshold) {
       for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
         if (peer != raftNode.me && raftConfigHasPeer(peer)) {
           raftSendAppendEntries(peer);
@@ -409,8 +409,8 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
   Time_t curTime = xTaskGetTickCount();
   if (raftNode.currentState != RAFT_STATE_LEADER) {
-    if ((curTime - raftNode.lastHeartbeatTime) > RAFT_ELECTION_TIMEOUT) {
-      DEBUG_PRINT("raftLogApplyTimerCallback: %u timeout in term %u, commitIndex = %u.\n",
+    if ((curTime - raftNode.lastHeartbeatTime) > (rand() % RAFT_HEARTBEAT_INTERVAL + RAFT_ELECTION_TIMEOUT)) {
+      DEBUG_PRINT("raftElectionTimerCallback: %u timeout in term %u, commitIndex = %u.\n",
                   raftNode.me,
                   raftNode.currentTerm,
                   raftNode.commitIndex);
@@ -423,7 +423,7 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
       }
     }
   } else {
-    raftNode.lastHeartbeatTime = xTaskGetTickCount();
+    raftNode.lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL + xTaskGetTickCount();
   }
   xSemaphoreGive(raftNode.mu);
 }
@@ -549,7 +549,7 @@ void raftInit() {
     raftNode.matchIndex[i] = 0;
     raftNode.latestAppliedRequestId[i] = 0;
   }
-  raftNode.lastHeartbeatTime = xTaskGetTickCount();
+  raftNode.lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL;
   raftNode.config = EMPTY_CONFIG;
   raftNode.config.clusterId = raftClusterId;
   for (int member = 0; member <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; member++) {
@@ -568,8 +568,9 @@ void raftInit() {
                                    (void *) 0,
                                     raftHeartbeatTimerCallback);
   xTimerStart(raftHeartbeatTimer, M2T(0));
+  srand(raftNode.me);
   raftElectionTimer = xTimerCreate("raftElectionTimer",
-                                   M2T((rand() % 50 + RAFT_ELECTION_TIMEOUT) / 2),
+                                   M2T((rand() % RAFT_HEARTBEAT_INTERVAL + RAFT_ELECTION_TIMEOUT) / 2),
                                    pdTRUE,
                                    (void *) 0,
                                    raftElectionTimerCallback);
@@ -649,7 +650,7 @@ void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t 
     return;
   }
   raftNode.voteFor = args->candidateId;
-  raftNode.lastHeartbeatTime = xTaskGetTickCount();
+  raftNode.lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL + xTaskGetTickCount();
   DEBUG_PRINT("raftProcessRequestVote: %u grant vote to %u.\n", raftNode.me, args->candidateId);
   raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, true);
 }
@@ -809,7 +810,7 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
     convertToFollower(&raftNode);
   }
   raftNode.currentLeader = peerAddress;
-  raftNode.lastHeartbeatTime = xTaskGetTickCount();
+  raftNode.lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL + xTaskGetTickCount();
   /* Reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm. */
   // TODO: check snapshot
   int matchedItemIndex = raftLogFindMatched(&raftNode.log, args->prevLogIndex, args->prevLogTerm);

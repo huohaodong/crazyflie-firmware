@@ -191,8 +191,10 @@ static void uwbRoutingTxTask(void *parameters) {
       Route_Entry_t toDest = routingTableFindEntry(&routingTable, uwbTxDataPacketCache->header.destAddress);
       UWB_Address_t nextHopToDest = toDest.destAddress;
       /* Update expiration time of each route to originator & sender (neighbor)*/
-      routingTableUpdateExpirationTime(&routingTable, uwbTxDataPacketCache->header.srcAddress);
-      routingTableUpdateExpirationTime(&routingTable, uwbTxPacketCache.header.srcAddress);
+      if (toDest.type != ROUTE_OLSR) {
+        routingTableUpdateExpirationTime(&routingTable, uwbTxDataPacketCache->header.srcAddress);
+        routingTableUpdateExpirationTime(&routingTable, uwbTxPacketCache.header.srcAddress);
+      }
       if (uwbTxDataPacketCache->header.destAddress == uwbGetAddress()) {
 //        DEBUG_PRINT("uwbRoutingTxTask: Send data packet dest to self.\n");
         xSemaphoreGive(txBufferMutex);

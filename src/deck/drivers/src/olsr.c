@@ -279,7 +279,6 @@ static void computeRoutingTable() {
         hopCount++;
       }
       DEBUG_PRINT("<-%u \n", prevHopOf[cur]);
-      // TODO: add route entry
       if (prevHopOf[cur] != UWB_DEST_EMPTY) {
         Route_Entry_t route = {
             .type = ROUTE_OLSR,
