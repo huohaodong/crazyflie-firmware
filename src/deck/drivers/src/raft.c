@@ -43,8 +43,6 @@ static Raft_Config_t EMPTY_CONFIG = {
     .clusterId = RAFT_CLUSTER_ID_EMPTY,
     .clusterSize = 0
 };
-static uint8_t lowerCount = 0;
-static uint8_t threshold = 10;
 
 static bool raftConfigAdd(UWB_Address_t node) {
   raftNode.config.previousConfig = raftNode.config.currentConfig;
@@ -274,7 +272,7 @@ static void convertToFollower(Raft_Node_t *node) {
   node->currentState = RAFT_STATE_FOLLOWER;
   node->currentLeader = UWB_DEST_EMPTY;
   node->voteFor = RAFT_VOTE_FOR_NO_ONE;
-  lowerCount = 1;
+  node->lowerCount = 0;
   for (int i = 0; i <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; i++) {
     node->peerVote[i] = false;
     node->peerStability[i] = 0.0f;
@@ -291,7 +289,7 @@ static void convertToFollower(Raft_Node_t *node) {
 static void convertToLeader(Raft_Node_t *node) {
   node->currentState = RAFT_STATE_LEADER;
   node->currentLeader = node->me;
-  lowerCount = 2;
+  node->lowerCount = 0;
   for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     node->peerVote[peer] = false;
   }
@@ -320,7 +318,7 @@ static void convertToCandidate(Raft_Node_t *node) {
   }
   node->voteFor = raftNode.me;
   node->lastHeartbeatTime = xTaskGetTickCount();
-  lowerCount = 3;
+  node->lowerCount = 0;
   ledSet(LED_GREEN_L, false);
   ledSet(LED_RED_L, false);
   ledSet(LED_GREEN_R, false);
@@ -373,7 +371,7 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  printRaftConfig(raftNode.config);
 //  printRaftLog(&raftNode.log);
   printRoutingTable(getGlobalRoutingTable());
-  DEBUG_PRINT("lowerCount = %u\n", lowerCount);
+  DEBUG_PRINT("lowerCount = %u\n", raftNode.lowerCount);
   DEBUG_PRINT("neighbor \t stability \t\n");
   for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     if (peer != raftNode.me && raftConfigHasPeer(peer)) {
@@ -384,12 +382,12 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
   DEBUG_PRINT("\n");
   if (raftNode.currentState == RAFT_STATE_LEADER) {
     if (!raftStabilityCheck()) {
-      lowerCount++;
+      raftNode.lowerCount++;
     }
     if (raftFullConsensusCheck()) {
       DEBUG_PRINT("raftFullConsensusCheck\n");
     }
-    if (!raftFullConsensusCheck() || lowerCount < threshold) {
+    if (!raftFullConsensusCheck() || raftNode.lowerCount < RAFT_AUTO_LEADERSHIP_CHANGE_THRESHOLD) {
       for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
         if (peer != raftNode.me && raftConfigHasPeer(peer)) {
           raftSendAppendEntries(peer);
@@ -549,6 +547,7 @@ void raftInit() {
     raftNode.matchIndex[i] = 0;
     raftNode.latestAppliedRequestId[i] = 0;
   }
+  raftNode.lowerCount = 0;
   raftNode.lastHeartbeatTime = xTaskGetTickCount();
   raftNode.config = EMPTY_CONFIG;
   raftNode.config.clusterId = raftClusterId;

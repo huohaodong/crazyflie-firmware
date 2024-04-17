@@ -24,6 +24,12 @@
 #define RAFT_LOG_ENTRIES_SIZE_MAX ((ROUTING_DATA_PACKET_PAYLOAD_SIZE_MAX - 28) / sizeof(Raft_Log_Item_t))
 #define RAFT_CLUSTER_ID_EMPTY 255
 
+/* Function Switch */
+#define ENABLE_RAFT_AUTO_LEADERSHIP
+#ifdef ENABLE_RAFT_AUTO_LEADERSHIP
+  #define RAFT_AUTO_LEADERSHIP_CHANGE_THRESHOLD 20
+#endif
+
 typedef enum {
   RAFT_STATE_FOLLOWER,
   RAFT_STATE_CANDIDATE,
@@ -92,6 +98,7 @@ typedef struct {
   /* State for client */
   uint16_t latestAppliedRequestId[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX + 1]; /* latest request id applied to the state machine for each client */
   float peerStability[RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX + 1];
+  uint8_t lowerCount;
 } Raft_Node_t;
 
 typedef enum {
