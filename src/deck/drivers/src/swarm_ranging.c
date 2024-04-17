@@ -157,14 +157,14 @@ void setDistance(UWB_Address_t neighborAddress, int16_t distance) {
   distanceTowards[neighborAddress] = distance;
 }
 // TODO: check
-static float a = 1.01f;
-static float b = -1.61f;
-static float c = 9.97f;
+static float a = -1.61f;
+static float b = 9.97f;
+static float c = 1.01f;
 static float computePacketLossRate(UWB_Address_t neighborAddress) {
   if (distanceTowards[neighborAddress] == -1) {
     return 0.0f;
   }
-  return 1 / (exp(a * getDistance(neighborAddress) + b) +  c);
+  return 1 / (exp(a * (getDistance(neighborAddress) * 1.0f / 100) + b) + c);
 }
 
 void rangingTableBufferInit(Ranging_Table_Tr_Rr_Buffer_t *rangingTableBuffer) {
@@ -720,6 +720,8 @@ static void topologySensing(Ranging_Message_t *rangingMessage) {
           mprSelectorSetRemove(getGlobalMPRSelectorSet(), neighborAddress);
         }
       }
+      // TODO: check
+      neighborSet.packetLossRate[neighborAddress] = rangingMessage->bodyUnits[i].packetLossRate;
     }
     #endif
     UWB_Address_t twoHopNeighbor = rangingMessage->bodyUnits[i].address;
@@ -732,10 +734,6 @@ static void topologySensing(Ranging_Message_t *rangingMessage) {
         neighborSetAddRelation(&neighborSet, neighborAddress, twoHopNeighbor);
       }
       neighborSetUpdateExpirationTime(&neighborSet, twoHopNeighbor);
-    }
-    if (neighborSetHasOneHop(&neighborSet, rangingMessage->bodyUnits[i].address)) {
-      // TODO: check
-      neighborSet.packetLossRate[rangingMessage->bodyUnits[i].address] = rangingMessage->bodyUnits[i].packetLossRate;
     }
   }
 }
@@ -759,7 +757,8 @@ static void neighborSetClearExpireTimerCallback(TimerHandle_t timer) {
 float getPacketLossRate(UWB_Address_t neighborAddress) {
   // TODO: check
   ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
-  return computePacketLossRate(neighborAddress) * 0.75f + statLossRate[neighborAddress] * 0.25;
+  DEBUG_PRINT("packetlossrate = %f \n", computePacketLossRate(neighborAddress));
+  return computePacketLossRate(neighborAddress) * 0.5f + statLossRate[neighborAddress] * 0.5;
 }
 
 void printRangingTable(Ranging_Table_t *table) {
@@ -1302,7 +1301,7 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
         rangingMessage->bodyUnits[bodyUnitNumber].flags.MPR = false;
       }
       // TODO: check
-      rangingMessage->bodyUnits[bodyUnitNumber].packetLossRate = computePacketLossRate(table->neighborAddress);
+      rangingMessage->bodyUnits[bodyUnitNumber].packetLossRate = getPacketLossRate(table->neighborAddress);
       #endif
 
       bodyUnitNumber++;
