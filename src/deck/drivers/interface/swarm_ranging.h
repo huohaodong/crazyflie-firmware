@@ -52,9 +52,10 @@ typedef struct {
     uint8_t MPR: 1;
     uint8_t RESERVED: 7;
   } flags; // 1 byte
+  float packetLossRate; // 2 byte
   uint16_t address; // 2 byte
   Timestamp_Tuple_t timestamp; // 10 byte
-} __attribute__((packed)) Body_Unit_t; // 13 byte
+} __attribute__((packed)) Body_Unit_t; // 15 byte
 
 /* Ranging Message Header*/
 typedef struct {
@@ -166,6 +167,7 @@ typedef struct {
   Neighbor_Set_Hooks_t neighborExpirationHooks;
   Neighbor_Set_Hooks_t neighborTopologyChangeHooks;
   Time_t expirationTime[NEIGHBOR_ADDRESS_MAX + 1];
+  float packetLossRate[NEIGHBOR_ADDRESS_MAX + 1];
 } Neighbor_Set_t;
 
 /* Ranging Operations */

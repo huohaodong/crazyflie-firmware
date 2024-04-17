@@ -15,7 +15,7 @@
 #define OLSR_TC_MAX_BODY_UNIT ((OLSR_PACKET_PAYLOAD_SIZE_MAX - sizeof(OLSR_Message_Header_t) - 2) / sizeof(OLSR_TC_Body_Unit_t))
 #define OLSR_TC_INTERVAL 500
 
-#define OLSR_ROUTING_COMPUTATION_USE_HOP
+//#define OLSR_ROUTING_COMPUTATION_USE_HOP
 
 /* MPR Selector Set */
 #define OLSR_MPR_SELECTOR_SET_HOLD_TIME (6 * OLSR_TC_INTERVAL)
@@ -49,7 +49,7 @@ typedef struct {
 
 typedef struct {
   UWB_Address_t mprSelector;
-  // TODO: add link state weight
+  float etx;
 } __attribute__((packed)) OLSR_TC_Body_Unit_t;
 
 typedef struct {

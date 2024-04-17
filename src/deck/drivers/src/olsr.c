@@ -327,6 +327,7 @@ static void olsrSendTc() {
       }
       if (mprSelectorSetHas(&mprSelectorSet, cur)) {
         tcMsg->bodyUnits[mprSelectorSendCount].mprSelector = cur;
+        tcMsg->bodyUnits[mprSelectorSendCount].etx = 1.0f; // TODO
         mprSelectorSendCount++;
       }
     }
