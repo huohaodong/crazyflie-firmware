@@ -34,6 +34,9 @@ static uint16_t olsrTcMsgSeqNumber = 0;
 static uint16_t olsrTcANSN = 0; /* Advertised Neighbor Sequence Number */
 static uint16_t lastReceivedTcSeqNumbers[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
 static uint16_t olsrPacketSeqNumber = 0;
+#ifndef OLSR_ROUTING_COMPUTATION_USE_HOP
+static TimerHandle_t routingTableComputeTimer;
+#endif
 
 static bool olsrIsDupTc(UWB_Address_t originAddress, uint16_t seqNumber) {
   ASSERT(originAddress <= NEIGHBOR_ADDRESS_MAX);
@@ -668,6 +671,14 @@ static void topologySetClearExpireTimerCallback(TimerHandle_t timer) {
   xSemaphoreGive(olsrSetsMutex);
 }
 
+static void routingTableComputeTimerCallback(TimerHandle_t timer) {
+  xSemaphoreTake(olsrSetsMutex, portMAX_DELAY);
+  xSemaphoreTake(routingTable->mu, portMAX_DELAY);
+  computeRoutingTable();
+  xSemaphoreGive(routingTable->mu);
+  xSemaphoreGive(olsrSetsMutex);
+}
+
 void printMPRSet(MPR_Set_t *set) {
   DEBUG_PRINT("%u has %u mpr neighbors = ", uwbGetAddress(), set->size);
   for (UWB_Address_t neighborAddress = 0; neighborAddress <= NEIGHBOR_ADDRESS_MAX; neighborAddress++) {
@@ -786,6 +797,14 @@ void olsrInit() {
                              (void *) 0,
                              olsrTcTimerCallback);
   xTimerStart(olsrTcTimer, M2T(0));
+  #ifndef OLSR_ROUTING_COMPUTATION_USE_HOP
+  routingTableComputeTimer = xTimerCreate("routingTableComputeTimer",
+                                          M2T(2000),
+                                          pdTRUE,
+                                          (void *) 0,
+                                          routingTableComputeTimerCallback);
+  xTimerStart(routingTableComputeTimer, M2T(0));
+  #endif
 
   UWB_Message_Listener_t listener;
   listener.type = UWB_OLSR_MESSAGE;

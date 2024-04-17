@@ -758,7 +758,8 @@ static void neighborSetClearExpireTimerCallback(TimerHandle_t timer) {
 
 float getPacketLossRate(UWB_Address_t neighborAddress) {
   // TODO: check
-  return computePacketLossRate(neighborAddress);
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  return computePacketLossRate(neighborAddress) * 0.75f + statLossRate[neighborAddress] * 0.25;
 }
 
 void printRangingTable(Ranging_Table_t *table) {
