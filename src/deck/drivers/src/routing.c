@@ -94,7 +94,8 @@ int routingTableClearExpire(Routing_Table_t *table) {
   Time_t curTime = xTaskGetTickCount();
   int evictionCount = 0;
   for (int p1 = 0, p2 = table->size - 1; p1 <= p2;) {
-    if (table->entries[p1].expirationTime != 0 && table->entries[p1].expirationTime <= curTime) {
+    // TODO: check
+    if (table->entries[p1].expirationTime != 0 && table->entries[p1].type != ROUTE_OLSR && table->entries[p1].expirationTime <= curTime) {
       DEBUG_PRINT("routingTableClearExpire: Clean route entry for neighbor %u that expire at %lu.\n",
                   table->entries[p1].destAddress,
                   table->entries[p1].expirationTime);
@@ -191,10 +192,8 @@ static void uwbRoutingTxTask(void *parameters) {
       Route_Entry_t toDest = routingTableFindEntry(&routingTable, uwbTxDataPacketCache->header.destAddress);
       UWB_Address_t nextHopToDest = toDest.destAddress;
       /* Update expiration time of each route to originator & sender (neighbor)*/
-      if (toDest.type != ROUTE_OLSR) {
-        routingTableUpdateExpirationTime(&routingTable, uwbTxDataPacketCache->header.srcAddress);
-        routingTableUpdateExpirationTime(&routingTable, uwbTxPacketCache.header.srcAddress);
-      }
+      routingTableUpdateExpirationTime(&routingTable, uwbTxDataPacketCache->header.srcAddress);
+      routingTableUpdateExpirationTime(&routingTable, uwbTxPacketCache.header.srcAddress);
       if (uwbTxDataPacketCache->header.destAddress == uwbGetAddress()) {
 //        DEBUG_PRINT("uwbRoutingTxTask: Send data packet dest to self.\n");
         xSemaphoreGive(txBufferMutex);

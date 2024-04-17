@@ -409,7 +409,7 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
   Time_t curTime = xTaskGetTickCount();
   if (raftNode.currentState != RAFT_STATE_LEADER) {
-    if ((curTime - raftNode.lastHeartbeatTime) > (rand() % RAFT_HEARTBEAT_INTERVAL + RAFT_ELECTION_TIMEOUT)) {
+    if (curTime > raftNode.lastHeartbeatTime + rand() % RAFT_HEARTBEAT_INTERVAL + RAFT_ELECTION_TIMEOUT) {
       DEBUG_PRINT("raftElectionTimerCallback: %u timeout in term %u, commitIndex = %u.\n",
                   raftNode.me,
                   raftNode.currentTerm,
