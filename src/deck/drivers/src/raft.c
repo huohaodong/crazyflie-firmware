@@ -44,7 +44,7 @@ static Raft_Config_t EMPTY_CONFIG = {
     .clusterSize = 0
 };
 static uint8_t lowerCount = 0;
-static uint8_t threshold = 200;
+static uint8_t threshold = 10;
 
 static bool raftConfigAdd(UWB_Address_t node) {
   raftNode.config.previousConfig = raftNode.config.currentConfig;
@@ -279,7 +279,7 @@ static void convertToFollower(Raft_Node_t *node) {
     node->peerVote[i] = false;
     node->peerStability[i] = 0.0f;
   }
-  node->lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL + xTaskGetTickCount();
+  node->lastHeartbeatTime = xTaskGetTickCount();
   ledSet(LED_GREEN_L, false);
   ledSet(LED_RED_L, false);
   ledSet(LED_GREEN_R, false);
@@ -319,7 +319,7 @@ static void convertToCandidate(Raft_Node_t *node) {
     node->peerVote[peer] = false;
   }
   node->voteFor = raftNode.me;
-  node->lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL + xTaskGetTickCount() + RAFT_ELECTION_TIMEOUT;
+  node->lastHeartbeatTime = xTaskGetTickCount();
   lowerCount = 3;
   ledSet(LED_GREEN_L, false);
   ledSet(LED_RED_L, false);
@@ -389,7 +389,7 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
     if (raftFullConsensusCheck()) {
       DEBUG_PRINT("raftFullConsensusCheck\n");
     }
-    if (raftFullConsensusCheck() || lowerCount < threshold) {
+    if (!raftFullConsensusCheck() || lowerCount < threshold) {
       for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
         if (peer != raftNode.me && raftConfigHasPeer(peer)) {
           raftSendAppendEntries(peer);
@@ -423,7 +423,7 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
       }
     }
   } else {
-    raftNode.lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL + xTaskGetTickCount();
+    raftNode.lastHeartbeatTime = xTaskGetTickCount();
   }
   xSemaphoreGive(raftNode.mu);
 }
@@ -549,7 +549,7 @@ void raftInit() {
     raftNode.matchIndex[i] = 0;
     raftNode.latestAppliedRequestId[i] = 0;
   }
-  raftNode.lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL;
+  raftNode.lastHeartbeatTime = xTaskGetTickCount();
   raftNode.config = EMPTY_CONFIG;
   raftNode.config.clusterId = raftClusterId;
   for (int member = 0; member <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; member++) {
@@ -650,7 +650,7 @@ void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t 
     return;
   }
   raftNode.voteFor = args->candidateId;
-  raftNode.lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL + xTaskGetTickCount();
+  raftNode.lastHeartbeatTime = xTaskGetTickCount();
   DEBUG_PRINT("raftProcessRequestVote: %u grant vote to %u.\n", raftNode.me, args->candidateId);
   raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, true);
 }
@@ -810,7 +810,7 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
     convertToFollower(&raftNode);
   }
   raftNode.currentLeader = peerAddress;
-  raftNode.lastHeartbeatTime = rand() % RAFT_HEARTBEAT_INTERVAL + xTaskGetTickCount();
+  raftNode.lastHeartbeatTime = xTaskGetTickCount();
   /* Reply false if log doesn't contain an entry at prevLogIndex whose term matches prevLogTerm. */
   // TODO: check snapshot
   int matchedItemIndex = raftLogFindMatched(&raftNode.log, args->prevLogIndex, args->prevLogTerm);
