@@ -37,6 +37,7 @@ static Route_Entry_t EMPTY_ROUTE_ENTRY = {
     .nextHop = UWB_DEST_EMPTY,
     .hopCount = 1,
     .expirationTime = 0,
+    .metric = 0.0f,
     .destSeqNumber = 0,
     .validDestSeqFlag = false,
     .precursors = 0,
@@ -622,31 +623,33 @@ void routeExpirationHooksInvoke(Route_Expiration_Hooks_t *hooks, UWB_Address_t *
 }
 
 void printRouteEntry(Route_Entry_t *entry) {
-  DEBUG_PRINT("dest\t next\t hop\t destSeq\t type\t expire\t validSeq\t valid \t \n");
-  DEBUG_PRINT("%u\t %u\t %u\t %lu\t %d\t %lu\t %d\t %d\t \n",
+  DEBUG_PRINT("dest\t next\t hop\t destSeq\t type\t expire\t metric\t validSeq\t valid \t \n");
+  DEBUG_PRINT("%u\t %u\t %u\t %lu\t %d\t %lu\t %.2f\t %d\t %d\t \n",
               entry->destAddress,
               entry->nextHop,
               entry->hopCount,
               entry->destSeqNumber,
               entry->type,
               entry->expirationTime,
+              entry->metric,
               entry->validDestSeqFlag,
               entry->valid);
 }
 
 void printRoutingTable(Routing_Table_t *table) {
-  DEBUG_PRINT("dest\t next\t hop\t destSeq\t type\t expire\t validSeq\t valid \t \n");
+  DEBUG_PRINT("dest\t next\t hop\t destSeq\t type\t expire\t metric\t validSeq\t valid \t \n");
   for (int i = 0; i < table->size; i++) {
     if (table->entries[i].destAddress == UWB_DEST_EMPTY) {
       continue;
     }
-    DEBUG_PRINT("%u\t %u\t %u\t %lu\t %d\t %lu\t %d\t %d\t \n",
+    DEBUG_PRINT("%u\t %u\t %u\t %lu\t %d\t %lu\t %.2f\t %d\t %d\t \n",
                 table->entries[i].destAddress,
                 table->entries[i].nextHop,
                 table->entries[i].hopCount,
                 table->entries[i].destSeqNumber,
                 table->entries[i].type,
                 table->entries[i].expirationTime,
+                table->entries[i].metric,
                 table->entries[i].validDestSeqFlag,
                 table->entries[i].valid);
   }

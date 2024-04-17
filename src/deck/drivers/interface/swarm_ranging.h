@@ -225,6 +225,9 @@ void neighborSetHooksInvoke(Neighbor_Set_Hooks_t *hooks, UWB_Address_t neighborA
 void neighborSetUpdateExpirationTime(Neighbor_Set_t *set, UWB_Address_t neighborAddress);
 int neighborSetClearExpire(Neighbor_Set_t *set);
 
+/* Stat Operations */
+float getPacketLossRate(UWB_Address_t neighborAddress);
+
 /* Debug Operations */
 void printRangingTable(Ranging_Table_t *rangingTable);
 void printRangingTableSet(Ranging_Table_Set_t *set);

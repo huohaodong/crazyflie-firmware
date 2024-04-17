@@ -75,6 +75,7 @@ typedef struct {
   UWB_Address_t nextHop;
   uint8_t hopCount;
   Time_t expirationTime;
+  float metric;
   /* AODV properties */
   uint32_t destSeqNumber;
   bool validDestSeqFlag;

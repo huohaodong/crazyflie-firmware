@@ -229,39 +229,40 @@ static void computeRoutingTable() {
     }
   }
   #else
-  float curWeight[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
-  /* Init path weight for one-hop neighbors */
+  float curWeight[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 666666.6f};
+  /* Init path etx for one-hop neighbors */
   for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
     if (neighborSetHasOneHop(neighborSet, oneHopNeighbor)) {
-      // TODO: add link state as weight to calculate routing table.
-      curWeight[oneHopNeighbor] = 1;
+      // TODO: check
+      curWeight[oneHopNeighbor] =
+          1 / ((1 - neighborSet->packetLossRate[oneHopNeighbor]) * (1 - getPacketLossRate(oneHopNeighbor)));
       prevHopOf[oneHopNeighbor] = uwbGetAddress();
     }
   }
-  /* Perform dijkstra's algorithm to find the largest weight to each dest node in allKnownNodes */
+  /* Perform dijkstra's algorithm to find the minimum etx path to each dest node in allKnownNodes */
   for (UWB_Address_t round = 1; round <= allKnownNodes.size; round++) {
-    UWB_Address_t maxNode = UWB_DEST_EMPTY;
-    float maxWeight = 0;
+    UWB_Address_t minNode = UWB_DEST_EMPTY;
+    float minWeight = 666666.6f;
     /* Find the best path in current round */
     for (UWB_Address_t curNode = 0; curNode <= NEIGHBOR_ADDRESS_MAX; curNode++) {
       if (neighborBitSetHas(&allKnownNodes, curNode) && !visited[curNode]) {
-        if (curWeight[curNode] > maxWeight) {
-          maxNode = curNode;
-          maxWeight = curWeight[curNode];
+        if (curWeight[curNode] < minWeight) {
+          minNode = curNode;
+          minWeight = curWeight[curNode];
         }
       }
     }
-    if (maxNode == UWB_DEST_EMPTY) {
+    if (minNode == UWB_DEST_EMPTY) {
       break;
     }
-    visited[maxNode] = true;
+    visited[minNode] = true;
     /* Update weight for each path with lastAddress (MPR) = maxNode */
     for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
-      if (topologySetHas(&topologySet, mprSelector, maxNode)) {
-        // TODO: add link state as weight to calculate routing table.
-        if (curWeight[mprSelector] < curWeight[maxNode] + 1) {
-          curWeight[mprSelector] = curWeight[maxNode] + 1;
-          prevHopOf[mprSelector] = maxNode;
+      if (topologySetHas(&topologySet, mprSelector, minNode)) {
+        // TODO: check
+        if (curWeight[mprSelector] > curWeight[minNode] + topologySet.items[mprSelector][minNode].etx) {
+          curWeight[mprSelector] = curWeight[minNode] + topologySet.items[mprSelector][minNode].etx;
+          prevHopOf[mprSelector] = minNode;
         }
       }
     }
@@ -287,6 +288,7 @@ static void computeRoutingTable() {
             .nextHop = cur,
             .hopCount = hopCount,
             .expirationTime = 0,
+            .metric = curWeight[node],
             .destSeqNumber = 0,
             .validDestSeqFlag = false,
             .precursors = 0
@@ -327,7 +329,9 @@ static void olsrSendTc() {
       }
       if (mprSelectorSetHas(&mprSelectorSet, cur)) {
         tcMsg->bodyUnits[mprSelectorSendCount].mprSelector = cur;
-        tcMsg->bodyUnits[mprSelectorSendCount].etx = 1.0f; // TODO
+        // TODO: check
+        tcMsg->bodyUnits[mprSelectorSendCount].etx =
+            1 / ((1 - neighborSet->packetLossRate[cur]) * (1 - getPacketLossRate(cur)));
         mprSelectorSendCount++;
       }
     }
@@ -419,15 +423,22 @@ static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *tcMs
     } else {
       topologySetUpdateExpirationTime(&topologySet, mprSelector, mpr);
     }
-    DEBUG_PRINT("%u ", mprSelector);
+    topologySet.items[mprSelector][mpr].etx = tcMsg->bodyUnits[i].etx;
+    DEBUG_PRINT("%u, etx = %.2f", mprSelector, tcMsg->bodyUnits[i].etx);
   }
   DEBUG_PRINT("\n");
 
+  #ifdef OLSR_ROUTING_COMPUTATION_USE_HOP
   if (topologyChanged) {
     DEBUG_PRINT("olsrProcessTC: compute routing table.\n");
     printTopologySet(&topologySet);
     computeRoutingTable();
   }
+  #else
+    DEBUG_PRINT("olsrProcessTC: compute routing table.\n");
+    printTopologySet(&topologySet);
+    computeRoutingTable();
+  #endif
 
   tcMsg->header.hopCount++;
   tcMsg->header.ttl--;
@@ -589,6 +600,7 @@ void topologySetAdd(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Address_
     set->items[mprSelector][mpr].lastAddress = mpr;
     set->items[mprSelector][mpr].seqNumber = seqNumber;
     set->items[mprSelector][mpr].expirationTime = xTaskGetTickCount() + M2T(OLSR_TOPOLOGY_SET_HOLD_TIME);
+    set->items[mprSelector][mpr].etx = 0.0f;
     set->size++;
   }
 }
@@ -601,6 +613,7 @@ void topologySetRemove(Topology_Set_t *set, UWB_Address_t mprSelector, UWB_Addre
     set->items[mprSelector][mpr].lastAddress = UWB_DEST_EMPTY;
     set->items[mprSelector][mpr].seqNumber = 0;
     set->items[mprSelector][mpr].expirationTime = 0;
+    set->items[mprSelector][mpr].etx = 0.0f;
     set->size--;
   }
 }

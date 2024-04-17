@@ -70,6 +70,7 @@ typedef struct {
   UWB_Address_t lastAddress; /* MPR of destAddress */
   uint16_t seqNumber; /* ANSN */
   Time_t expirationTime;
+  float etx; // TODO: check
 } Topology_Tuple_t;
 
 typedef struct {
