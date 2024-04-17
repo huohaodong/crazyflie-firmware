@@ -710,15 +710,16 @@ void printTopologySetTuple(Topology_Tuple_t *tuple) {
 }
 
 void printTopologySet(Topology_Set_t *set) {
-  DEBUG_PRINT("dest\t last\t seq\t expire\t \n");
+  DEBUG_PRINT("dest\t last\t seq\t expire\t etx\t\n");
   for (UWB_Address_t mprSelector = 0; mprSelector <= NEIGHBOR_ADDRESS_MAX; mprSelector++) {
     for (UWB_Address_t mpr = 0; mpr <= NEIGHBOR_ADDRESS_MAX; mpr++) {
       if (topologySetHas(set, mprSelector, mpr)) {
-        DEBUG_PRINT("%u\t %u\t %u\t %lu\t \n",
+        DEBUG_PRINT("%u\t %u\t %u\t %lu\t %.2f\t\n",
                     set->items[mprSelector][mpr].destAddress,
                     set->items[mprSelector][mpr].lastAddress,
                     set->items[mprSelector][mpr].seqNumber,
-                    set->items[mprSelector][mpr].expirationTime
+                    set->items[mprSelector][mpr].expirationTime,
+                    set->items[mprSelector][mpr].etx
         );
       }
     }
