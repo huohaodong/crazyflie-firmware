@@ -181,7 +181,7 @@ static float a = -1.61f;
 static float b = 9.97f;
 static float c = 1.01f;
 static float computePacketLossRate(UWB_Address_t neighborAddress) {
-  if (distanceTowards[neighborAddress] == -1) {
+  if (getDistance(neighborAddress) == -1) {
     return 0.0f;
   }
   return 1 / (exp(a * (getDistance(neighborAddress) * 1.0f / 100) + b) + c);
