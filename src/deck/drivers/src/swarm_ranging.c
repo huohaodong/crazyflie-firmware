@@ -1070,7 +1070,7 @@ static void S4_RX_Rf(Ranging_Table_t *rangingTable) {
   #endif
   if (distance > 0) {
     rangingTable->distance = distance;
-    setDistance(rangingTable->neighborAddress, distance);
+//    setDistance(rangingTable->neighborAddress, distance); // TODO: simulation
   } else {
 //    DEBUG_PRINT("distance is not updated since some error occurs\n");
   }
@@ -1207,6 +1207,8 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   neighborRangingTable->period = MAX(neighborRangingTable->period, M2T(RANGING_PERIOD_MIN));
   neighborRangingTable->period = MIN(neighborRangingTable->period, M2T(RANGING_PERIOD_MAX));
   #endif
+  // TODO: simulation
+
 }
 
 /* By default, we include each neighbor's latest rx timestamp to body unit in index order of ranging table, which
@@ -1321,7 +1323,10 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
 //              rangingMessage->header.msgLength,
 //              bodyUnitNumber
 //  );
-
+// TODO: simulation
+  rangingMessage->header.x = 0.0f;
+  rangingMessage->header.y = 0.0f;
+  rangingMessage->header.z = 0.0f;
   /* Keeps ranging table in order to perform binary search */
   rangingTableSetRearrange(&rangingTableSet, COMPARE_BY_ADDRESS);
 
