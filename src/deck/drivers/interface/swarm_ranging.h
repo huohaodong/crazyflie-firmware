@@ -14,6 +14,14 @@
   #define DYNAMIC_RANGING_COEFFICIENT 1
 #endif
 #define ENABLE_RANGING_STAT
+#define ENABLE_SIMULATION
+#ifdef ENABLE_SIMULATION
+  #define SIMULATION_X_BOUND 500 // in cm
+  #define SIMULATION_Y_BOUND 500 // in cm
+  #define SIMULATION_TICK 1000 // in ms
+  #define SIMULATION_VELOCITY_X 50 // in cm/s
+  #define SIMULATION_VELOCITY_Y 50 // in cm/s
+#endif
 
 /* Ranging Constants */
 #define RANGING_PERIOD 200 // default in 200ms
@@ -67,7 +75,6 @@ typedef struct {
   uint16_t filter; // 16 bits bloom filter
   float x;
   float y;
-  float z;
 } __attribute__((packed)) Ranging_Message_Header_t; // 10 byte + 10 byte * MAX_Tr_UNIT
 
 /* Ranging Message */

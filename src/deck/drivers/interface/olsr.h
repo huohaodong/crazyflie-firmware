@@ -3,7 +3,7 @@
 
 #include "swarm_ranging.h"
 
-#define OLSR_DEBUG_ENABLE
+//#define OLSR_DEBUG_ENABLE
 
 /* Queue Constants */
 #define OLSR_RX_QUEUE_SIZE 5

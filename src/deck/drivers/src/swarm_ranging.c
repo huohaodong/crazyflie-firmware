@@ -1,5 +1,6 @@
 #include <math.h>
 #include <string.h>
+#include <stdlib.h>
 #include "FreeRTOS.h"
 #include "queue.h"
 #include "task.h"
@@ -62,6 +63,11 @@ static Ranging_Table_t EMPTY_RANGING_TABLE = {
     .lastSendTime = 0,
     .distance = -1
 };
+#ifdef ENABLE_SIMULATION
+static TimerHandle_t simulationTimer;
+static float simulationX;
+static float simulationY;
+#endif
 
 int16_t distanceTowards[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
 
@@ -83,7 +89,6 @@ double statTotalLossRate = 0.0;
 static TimerHandle_t statTimer;
 float lossRateF = 0.0f;
 #endif
-
 
 static void printRangingStat() {
   DEBUG_PRINT("totalSend\t totalRecv\t totalLossRate\t RangingCount\t RangingSuccess\t\n");
@@ -118,7 +123,8 @@ static void statUpdateTX(Ranging_Message_t *rangingMessage) {
 static void statUpdateRX(Ranging_Message_t *rangingMessage) {
   statTotalRecvCount++;
   UWB_Address_t neighborAddress = rangingMessage->header.srcAddress;
-  if (statLastRecvSeq[neighborAddress] >= rangingMessage->header.msgSequence || statFirstRecvSeq[neighborAddress] == 0) {
+  if (statLastRecvSeq[neighborAddress] >= rangingMessage->header.msgSequence
+      || statFirstRecvSeq[neighborAddress] == 0) {
     /* Sequence number wrap-around or this neighbor just have restarted, reset corresponding stat */
     statRecvCount[neighborAddress] = 1;
     statSendCount[neighborAddress] = 0;
@@ -145,6 +151,20 @@ static void statUpdateRX(Ranging_Message_t *rangingMessage) {
 static void statTimerCallback(TimerHandle_t timer) {
 //  printRangingStat();
   printRoutingTable(getGlobalRoutingTable());
+}
+
+static void simulationTimerCallback(TimerHandle_t timer) {
+//  printRangingStat();
+  int8_t xDirection = rand() % 2 == 0 ? 1 : -1;
+  int8_t yDirection = rand() % 2 == 0 ? 1 : -1;
+//  DEBUG_PRINT("xDirection = %d, yDirection = %d\n", xDirection, yDirection);
+  simulationX += 1.0f * xDirection * (SIMULATION_VELOCITY_X * SIMULATION_TICK) / 1000.0f;
+  simulationY += 1.0f * yDirection * (SIMULATION_VELOCITY_Y * SIMULATION_TICK) / 1000.0f;
+  simulationX = MAX(simulationX, 0.0f);
+  simulationX = MIN(simulationX, SIMULATION_X_BOUND);
+  simulationY = MAX(simulationY, 0.0f);
+  simulationY = MIN(simulationY, SIMULATION_Y_BOUND);
+  DEBUG_PRINT("curX = %.2f, curY = %.2f\n", simulationX, simulationY);
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
@@ -799,7 +819,8 @@ void printRangingMessage(Ranging_Message_t *rangingMessage) {
   if (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t) == 0) {
     return;
   }
-  uint16_t body_unit_number = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
+  uint16_t
+      body_unit_number = (rangingMessage->header.msgLength - sizeof(Ranging_Message_Header_t)) / sizeof(Body_Unit_t);
   if (body_unit_number >= RANGING_MAX_BODY_UNIT) {
     DEBUG_PRINT("printRangingMessage: malformed body unit number.\n");
     return;
@@ -955,7 +976,8 @@ static void S2_RX_Rf(Ranging_Table_t *rangingTable) {
   /* Find corresponding Tf in TfBuffer, it is possible that can not find corresponding Tf. */
   rangingTable->Tf = findTfBySeqNumber(rangingTable->Rf.seqNumber);
   if (!rangingTable->Tf.timestamp.full) {
-    DEBUG_PRINT("Cannot found corresponding Tf in Tf buffer, the ranging frequency may be too high or Tf buffer is in a small size.");
+    DEBUG_PRINT(
+        "Cannot found corresponding Tf in Tf buffer, the ranging frequency may be too high or Tf buffer is in a small size.");
   }
 
   /* Shift ranging table
@@ -1068,12 +1090,14 @@ static void S4_RX_Rf(Ranging_Table_t *rangingTable) {
     statRangingSuccessCount[rangingTable->neighborAddress]++;
   }
   #endif
+  #ifndef ENABLE_SIMULATION
   if (distance > 0) {
     rangingTable->distance = distance;
-//    setDistance(rangingTable->neighborAddress, distance); // TODO: simulation
+    setDistance(rangingTable->neighborAddress, distance);
   } else {
 //    DEBUG_PRINT("distance is not updated since some error occurs\n");
   }
+  #endif
 
   /* Shift ranging table
    * Rp <- Rf
@@ -1207,7 +1231,13 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   neighborRangingTable->period = MAX(neighborRangingTable->period, M2T(RANGING_PERIOD_MIN));
   neighborRangingTable->period = MIN(neighborRangingTable->period, M2T(RANGING_PERIOD_MAX));
   #endif
-  // TODO: simulation
+  #ifdef ENABLE_SIMULATION
+  float distance = sqrtf(
+      (simulationX - rangingMessage->header.x) * (simulationX - rangingMessage->header.x) +
+          (simulationY - rangingMessage->header.y) * (simulationY - rangingMessage->header.y));
+  setDistance(rangingMessage->header.srcAddress, distance);
+//  DEBUG_PRINT("distance to %u = %.2f\n", rangingMessage->header.srcAddress, distance);
+  #endif
 
 }
 
@@ -1323,10 +1353,10 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
 //              rangingMessage->header.msgLength,
 //              bodyUnitNumber
 //  );
-// TODO: simulation
-  rangingMessage->header.x = 0.0f;
-  rangingMessage->header.y = 0.0f;
-  rangingMessage->header.z = 0.0f;
+  #ifdef ENABLE_SIMULATION
+  rangingMessage->header.x = simulationX;
+  rangingMessage->header.y = simulationY;
+  #endif
   /* Keeps ranging table in order to perform binary search */
   rangingTableSetRearrange(&rangingTableSet, COMPARE_BY_ADDRESS);
 
@@ -1443,7 +1473,19 @@ void rangingInit() {
                            (void *) 0,
                            statTimerCallback);
   xTimerStart(statTimer, M2T(0));
+  srand(uwbGetAddress());
+  simulationX = rand() % SIMULATION_X_BOUND;
+  simulationY = rand() % SIMULATION_Y_BOUND;
 #endif
+#ifdef ENABLE_SIMULATION
+  simulationTimer = xTimerCreate("simulationTimer",
+                                 M2T(SIMULATION_TICK),
+                                 pdTRUE,
+                                 (void *) 0,
+                                 simulationTimerCallback);
+  xTimerStart(simulationTimer, M2T(0));
+#endif
+
   TfBufferMutex = xSemaphoreCreateMutex();
 
   listener.type = UWB_RANGING_MESSAGE;
