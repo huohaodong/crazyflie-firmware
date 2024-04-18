@@ -21,6 +21,7 @@
   #define SIMULATION_TICK 1000 // in ms
   #define SIMULATION_VELOCITY_X 50 // in cm/s
   #define SIMULATION_VELOCITY_Y 50 // in cm/s
+  #define SIMULATION_JITTER 15 // in cm
 #endif
 
 /* Ranging Constants */

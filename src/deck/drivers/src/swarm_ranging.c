@@ -1235,7 +1235,7 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   float distance = sqrtf(
       (simulationX - rangingMessage->header.x) * (simulationX - rangingMessage->header.x) +
           (simulationY - rangingMessage->header.y) * (simulationY - rangingMessage->header.y));
-  setDistance(rangingMessage->header.srcAddress, distance);
+  setDistance(rangingMessage->header.srcAddress, distance + random() % SIMULATION_JITTER);
 //  DEBUG_PRINT("distance to %u = %.2f\n", rangingMessage->header.srcAddress, distance);
   #endif
 
