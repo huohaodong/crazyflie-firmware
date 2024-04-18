@@ -16,8 +16,8 @@
 #define ENABLE_RANGING_STAT
 #define ENABLE_SIMULATION
 #ifdef ENABLE_SIMULATION
-  #define SIMULATION_X_BOUND 500 // in cm
-  #define SIMULATION_Y_BOUND 500 // in cm
+  #define SIMULATION_X_BOUND 1200 // in cm
+  #define SIMULATION_Y_BOUND 1200 // in cm
   #define SIMULATION_TICK 1000 // in ms
   #define SIMULATION_VELOCITY_X 50 // in cm/s
   #define SIMULATION_VELOCITY_Y 50 // in cm/s

@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
 
 #include "stm32fxxx.h"
 
@@ -98,6 +99,13 @@ static void rxCallback() {
   ASSERT(msgType < UWB_MESSAGE_TYPE_COUNT);
 
   if (!(packet->header.destAddress == MY_UWB_ADDRESS || packet->header.destAddress == UWB_DEST_ANY)) {
+    dwt_forcetrxoff();
+    dwt_rxenable(DWT_START_RX_IMMEDIATE);
+    return;
+  }
+
+  if (getDistance(packet->header.srcAddress) != -1 &&
+      random() % 100 < getPacketLossRate(packet->header.srcAddress) * 100) {
     dwt_forcetrxoff();
     dwt_rxenable(DWT_START_RX_IMMEDIATE);
     return;

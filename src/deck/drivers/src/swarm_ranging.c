@@ -777,7 +777,7 @@ static void neighborSetClearExpireTimerCallback(TimerHandle_t timer) {
 float getPacketLossRate(UWB_Address_t neighborAddress) {
   // TODO: check
   ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
-  return computePacketLossRate(neighborAddress) * 0.5f + statLossRate[neighborAddress] * 0.5;
+  return computePacketLossRate(neighborAddress) * 0.75f + statLossRate[neighborAddress] * 0.25f;
 }
 
 void printRangingTable(Ranging_Table_t *table) {
@@ -1236,7 +1236,8 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
       (simulationX - rangingMessage->header.x) * (simulationX - rangingMessage->header.x) +
           (simulationY - rangingMessage->header.y) * (simulationY - rangingMessage->header.y));
   setDistance(rangingMessage->header.srcAddress, distance + random() % SIMULATION_JITTER);
-//  DEBUG_PRINT("distance to %u = %.2f\n", rangingMessage->header.srcAddress, distance);
+//  DEBUG_PRINT("distance to %u = %.2f, packetLossRate = %.2f\n", rangingMessage->header.srcAddress, distance,
+//              getPacketLossRate(rangingMessage->header.srcAddress));
   #endif
 
 }
