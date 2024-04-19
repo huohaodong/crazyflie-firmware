@@ -5,7 +5,7 @@
 #include "semphr.h"
 #include "routing.h"
 
-#define RAFT_DEBUG_ENABLE
+//#define RAFT_DEBUG_ENABLE
 
 /* Queue Constants */
 #define RAFT_RX_QUEUE_SIZE 5
@@ -14,13 +14,13 @@
 #define RAFT_COMMAND_BUFFER_QUEUE_ITEM_SIZE sizeof(Raft_Log_Command_Buffer_Item_t)
 
 /* Raft Constants */
-#define RAFT_LOG_SIZE_MAX 50
+#define RAFT_LOG_SIZE_MAX 1100
 #define RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX 31
 #define RAFT_VOTE_FOR_NO_ONE UWB_DEST_EMPTY
 #define RAFT_HEARTBEAT_INTERVAL 150 // default 150ms
-#define RAFT_ELECTION_TIMEOUT (15 * RAFT_HEARTBEAT_INTERVAL)
+#define RAFT_ELECTION_TIMEOUT (10 * RAFT_HEARTBEAT_INTERVAL)
 #define RAFT_LOG_APPLY_INTERVAL 50 // default 50ms
-#define RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX 15 // TODO: fine tuning
+#define RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX 2 // TODO: fine tuning
 #define RAFT_LOG_ENTRIES_SIZE_MAX ((ROUTING_DATA_PACKET_PAYLOAD_SIZE_MAX - 28) / sizeof(Raft_Log_Item_t))
 #define RAFT_CLUSTER_ID_EMPTY 255
 

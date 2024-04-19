@@ -22,6 +22,7 @@
 static QueueHandle_t rxQueue;
 static QueueHandle_t commandBufferQueue;
 static TaskHandle_t raftRxTaskHandle;
+static TaskHandle_t raftTestTaskHandle;
 static TaskHandle_t raftCommandTaskHandle;
 static Raft_Node_t raftNode;
 static TimerHandle_t raftElectionTimer;
@@ -344,7 +345,7 @@ static bool raftStabilityCheck() {
     }
   }
   if (count > raftNode.config.clusterSize / 2) {
-    DEBUG_PRINT("raftStabilityCheck: %u stability = %f, lower than half of my followers.\n", raftNode.me, currentStability);
+//    DEBUG_PRINT("raftStabilityCheck: %u stability = %f, lower than half of my followers.\n", raftNode.me, currentStability);
     return false;
   }
   return true;
@@ -352,10 +353,10 @@ static bool raftStabilityCheck() {
 
 static bool raftFullConsensusCheck() {
   uint8_t count = 0;
-  DEBUG_PRINT("matchindex\tneighbor\t\n");
+//  DEBUG_PRINT("matchindex\tneighbor\t\n");
   for (UWB_Address_t peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     if (raftConfigHasPeer(peer) && peer != raftNode.me) {
-      DEBUG_PRINT("%u\t%u\t\n", raftNode.matchIndex[peer], peer);
+//      DEBUG_PRINT("%u\t%u\t\n", raftNode.matchIndex[peer], peer);
       if (raftNode.commitIndex == raftNode.matchIndex[peer]) {
         count++;
       }
@@ -368,9 +369,9 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
 //DEBUG_PRINT("leader = %u, my \n", );
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
-  printRaftConfig(raftNode.config);
-  printRaftLog(&raftNode.log);
-  printRoutingTable(getGlobalRoutingTable());
+//  printRaftConfig(raftNode.config);
+//  printRaftLog(&raftNode.log);
+//  printRoutingTable(getGlobalRoutingTable());
 //  DEBUG_PRINT("lowerCount = %u\n", raftNode.lowerCount);
 //  DEBUG_PRINT("neighbor \t stability \t\n");
   for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
@@ -383,9 +384,6 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
   if (raftNode.currentState == RAFT_STATE_LEADER) {
     if (!raftStabilityCheck()) {
       raftNode.lowerCount++;
-    }
-    if (raftFullConsensusCheck()) {
-//      DEBUG_PRINT("raftFullConsensusCheck\n");
     }
     if (!raftFullConsensusCheck() || raftNode.lowerCount < RAFT_AUTO_LEADERSHIP_CHANGE_THRESHOLD) {
       for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
@@ -408,10 +406,10 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
   Time_t curTime = xTaskGetTickCount();
   if (raftNode.currentState != RAFT_STATE_LEADER) {
     if (curTime > raftNode.lastHeartbeatTime + rand() % RAFT_HEARTBEAT_INTERVAL + RAFT_ELECTION_TIMEOUT) {
-      DEBUG_PRINT("raftElectionTimerCallback: %u timeout in term %u, commitIndex = %u.\n",
-                  raftNode.me,
-                  raftNode.currentTerm,
-                  raftNode.commitIndex);
+//      DEBUG_PRINT("raftElectionTimerCallback: %u timeout in term %u, commitIndex = %u.\n",
+//                  raftNode.me,
+//                  raftNode.currentTerm,
+//                  raftNode.commitIndex);
       convertToCandidate(&raftNode);
       for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
         if (peer != raftNode.me && raftConfigHasPeer(peer)) {
@@ -482,23 +480,23 @@ static void bufferRaftCommand(uint16_t readIndex, Raft_Log_Command_t *command) {
   if (xQueueSend(commandBufferQueue, &item, M2T(0)) == pdFALSE) {
     Raft_Log_Command_Buffer_Item_t evicted;
     xQueueReceive(commandBufferQueue, &evicted, M2T(0));
-    DEBUG_PRINT(
-        "bufferRaftCommand: %u command buffer is full, evict command from %u, type = %d, requestId = %u, readIndex = %u.\n",
-        raftNode.me,
-        evicted.clientId,
-        evicted.type,
-        evicted.requestId,
-        evicted.readIndex
-    );
+//    DEBUG_PRINT(
+//        "bufferRaftCommand: %u command buffer is full, evict command from %u, type = %d, requestId = %u, readIndex = %u.\n",
+//        raftNode.me,
+//        evicted.clientId,
+//        evicted.type,
+//        evicted.requestId,
+//        evicted.readIndex
+//    );
     xQueueSend(commandBufferQueue, &item, M2T(0));
   }
-  DEBUG_PRINT("bufferRaftCommand: %u buffer command from %u, type = %d, requestId = %u, readIndex = %u.\n",
-              raftNode.me,
-              item.clientId,
-              item.type,
-              item.requestId,
-              item.readIndex
-  );
+//  DEBUG_PRINT("bufferRaftCommand: %u buffer command from %u, type = %d, requestId = %u, readIndex = %u.\n",
+//              raftNode.me,
+//              item.clientId,
+//              item.type,
+//              item.requestId,
+//              item.readIndex
+//  );
 }
 
 static void raftCommandBufferConsumeTask() {
@@ -516,6 +514,54 @@ static void raftCommandBufferConsumeTask() {
       }
     }
     vTaskDelay(M2T(1));
+  }
+}
+
+static void testProposeEmptyLog() {
+  bool success = true;
+  uint16_t requestId = 0;
+  while (1) {
+    if (success) {
+      requestId = raftProposeNew(RAFT_LOG_COMMAND_RESERVED, NULL, 0);
+      success = false;
+    } else {
+      raftProposeRetry(requestId, RAFT_LOG_COMMAND_RESERVED, NULL, 0);
+    }
+    success = raftProposeCheck(requestId, 100);
+    consolePrintf("raftTestTask: proposed requestId = %u, success = %d.\n",
+                requestId,
+                success
+    );
+    if (success) {
+      break;
+    }
+  }
+}
+
+static uint16_t target = 50;
+
+static void raftTestTask() {
+  systemWaitStart();
+  while (raftNode.currentLeader == UWB_DEST_EMPTY) {
+    vTaskDelay(M2T(2000));
+  }
+  Time_t startTime = xTaskGetTickCount();
+  Time_t endTime = 0;
+  while (1) {
+    if (endTime == 0) {
+      if (raftNode.currentState == RAFT_STATE_LEADER && raftNode.log.size <= target && raftNode.commitIndex <= target) {
+        testProposeEmptyLog();
+        consolePrintf("current log len = %u.\n", raftNode.log.size);
+        vTaskDelay(M2T(10));
+      }
+      if (raftNode.commitIndex == target) {
+        endTime = xTaskGetTickCount();
+      }
+    } else {
+      consolePrintf("totalTime = %u\n", T2M(endTime) - T2M(startTime));
+      vTaskDelay(M2T(2000));
+    }
+    vTaskDelay(M2T(100));
   }
 }
 
@@ -585,6 +631,8 @@ void raftInit() {
               ADHOC_DECK_TASK_PRI, &raftRxTaskHandle);
   xTaskCreate(raftCommandBufferConsumeTask, ADHOC_DECK_RAFT_COMMAND_BUFFER_CONSUME_TASK_NAME, UWB_TASK_STACK_SIZE, NULL,
               ADHOC_DECK_TASK_PRI, &raftCommandTaskHandle);
+  xTaskCreate(raftTestTask, "RAFT_TEST_TASK", UWB_TASK_STACK_SIZE, NULL,
+              ADHOC_DECK_TASK_PRI, &raftTestTaskHandle);
 }
 
 Raft_Node_t *getGlobalRaftNode() {
@@ -738,7 +786,7 @@ void raftSendAppendEntries(UWB_Address_t peerAddress) {
   // TODO: check snapshot
   int preLogItemIndex = raftLogFindByIndex(&raftNode.log, raftNode.nextIndex[peerAddress] - 1);
   if (preLogItemIndex < 0) {
-    DEBUG_PRINT("raftSendAppendEntries: %u has preLogItemIndex < 0 for peer %u, ignore.\n", raftNode.me, peerAddress);
+//    DEBUG_PRINT("raftSendAppendEntries: %u has preLogItemIndex < 0 for peer %u, ignore.\n", raftNode.me, peerAddress);
     return;
   }
   args->prevLogIndex = raftNode.log.items[preLogItemIndex].index;
@@ -746,10 +794,10 @@ void raftSendAppendEntries(UWB_Address_t peerAddress) {
   args->leaderConfig = raftNode.config;
   int startItemIndex = preLogItemIndex + 1;
   int endItemIndex = MIN(preLogItemIndex + RAFT_LOG_ENTRIES_SIZE_MAX, raftNode.log.size - 1);
-  DEBUG_PRINT("raftSendAppendEntries: startItemIndex = %u, endItemIndex = %u, matchIndex = %u.\n",
-              startItemIndex,
-              endItemIndex,
-              raftNode.matchIndex[peerAddress]);
+//  DEBUG_PRINT("raftSendAppendEntries: startItemIndex = %u, endItemIndex = %u, matchIndex = %u.\n",
+//              startItemIndex,
+//              endItemIndex,
+//              raftNode.matchIndex[peerAddress]);
   /* Include log items with item index in [startItemIndex, endItemIndex] */
   args->entryCount = 0;
   for (int i = startItemIndex; i <= endItemIndex; i++) {
@@ -757,16 +805,16 @@ void raftSendAppendEntries(UWB_Address_t peerAddress) {
     args->entryCount++;
   }
   args->leaderCommit = raftNode.commitIndex;
-  DEBUG_PRINT("raftSendAppendEntries: %u send %d entries to %u, current log size = %u.\n",
-              raftNode.me,
-              args->entryCount,
-              peerAddress,
-              raftNode.log.size);
+//  DEBUG_PRINT("raftSendAppendEntries: %u send %d entries to %u, current log size = %u.\n",
+//              raftNode.me,
+//              args->entryCount,
+//              peerAddress,
+//              raftNode.log.size);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Args_t *args) {
-  DEBUG_PRINT("raftProcessAppendEntries: %u received append entries request from %u.\n", raftNode.me, peerAddress);
+//  DEBUG_PRINT("raftProcessAppendEntries: %u received append entries request from %u.\n", raftNode.me, peerAddress);
   if (raftNode.config.clusterId == RAFT_CLUSTER_ID_EMPTY && (args->leaderConfig.currentConfig & (1 << raftNode.me))) {
     /* 1. This works for one-step member changes, since new or removed node doesn't have a valid cluster id, only the
      * cluster leader that received RAFT_LOG_COMMAND_CONFIG_ADD may send append entries requests to current node.
@@ -778,34 +826,34 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
      * current node doesn't affect the correctness.
      */
     raftNode.config = args->leaderConfig;
-    DEBUG_PRINT("raftProcessAppendEntries: %u try to join the cluster %u.\n", raftNode.me, raftNode.config.clusterId);
+//    DEBUG_PRINT("raftProcessAppendEntries: %u try to join the cluster %u.\n", raftNode.me, raftNode.config.clusterId);
   }
   if (args->leaderConfig.clusterId != raftNode.config.clusterId || !raftConfigHasPeer(peerAddress)) {
-    DEBUG_PRINT("raftProcessAppendEntries: Peer %u not in current config, ignore.\n", peerAddress);
+//    DEBUG_PRINT("raftProcessAppendEntries: Peer %u not in current config, ignore.\n", peerAddress);
     return;
   }
   if (args->term < raftNode.currentTerm) {
-    DEBUG_PRINT("raftProcessAppendEntries: Peer term = %u < my term = %u, ignore.\n",
-                args->term,
-                raftNode.currentTerm);
+//    DEBUG_PRINT("raftProcessAppendEntries: Peer term = %u < my term = %u, ignore.\n",
+//                args->term,
+//                raftNode.currentTerm);
     raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, false, 0);
     return;
   }
   /* If RPC request or response contains term T > currentTerm, set currentTerm = T, convert to follower. */
   if (args->term > raftNode.currentTerm) {
-    DEBUG_PRINT("raftProcessAppendEntries: Peer term = %u > my term = %u, convert to follower.\n",
-                args->term,
-                raftNode.currentTerm
-    );
+//    DEBUG_PRINT("raftProcessAppendEntries: Peer term = %u > my term = %u, convert to follower.\n",
+//                args->term,
+//                raftNode.currentTerm
+//    );
     raftNode.currentTerm = args->term;
     convertToFollower(&raftNode);
   }
   /* Candidate: If AppendEntries RPC received from new leader, convert to follower. */
   if (raftNode.currentState == RAFT_STATE_CANDIDATE) {
-    DEBUG_PRINT(
-        "raftProcessAppendEntries: Candidate %u received append entries request from new leader %u, convert to follower.\n",
-        raftNode.me,
-        peerAddress);
+//    DEBUG_PRINT(
+//        "raftProcessAppendEntries: Candidate %u received append entries request from new leader %u, convert to follower.\n",
+//        raftNode.me,
+//        peerAddress);
     convertToFollower(&raftNode);
   }
   raftNode.currentLeader = peerAddress;
@@ -814,13 +862,13 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
   // TODO: check snapshot
   int matchedItemIndex = raftLogFindMatched(&raftNode.log, args->prevLogIndex, args->prevLogTerm);
   if (matchedItemIndex == -1) {
-    DEBUG_PRINT(
-        "raftProcessAppendEntries: %u log doesn't contain an entry at prevLogIndex = %u whose term matches prevLogTerm = %u, log size = %u, last applied = %u.\n",
-        raftNode.me,
-        args->prevLogIndex,
-        args->prevLogTerm,
-        raftNode.log.size,
-        raftNode.lastApplied);
+//    DEBUG_PRINT(
+//        "raftProcessAppendEntries: %u log doesn't contain an entry at prevLogIndex = %u whose term matches prevLogTerm = %u, log size = %u, last applied = %u.\n",
+//        raftNode.me,
+//        args->prevLogIndex,
+//        args->prevLogTerm,
+//        raftNode.log.size,
+//        raftNode.lastApplied);
     raftSendAppendEntriesReply(peerAddress, raftNode.currentTerm, false, raftNode.lastApplied + 1);
     return;
   }
@@ -830,18 +878,18 @@ void raftProcessAppendEntries(UWB_Address_t peerAddress, Raft_Append_Entries_Arg
   // TODO: check snapshot
   int startItemIndex = matchedItemIndex + 1;
   raftLogCleanFrom(&raftNode.log, startItemIndex);
-  DEBUG_PRINT("raftProcessAppendEntries: start index = %u, log size = %u.\n",
-              startItemIndex,
-              raftNode.log.size);
+//  DEBUG_PRINT("raftProcessAppendEntries: start index = %u, log size = %u.\n",
+//              startItemIndex,
+//              raftNode.log.size);
   /* Append any new entries not already in the log. */
   for (int i = 0; i < args->entryCount; i++) {
     raftLogAppend(&raftNode.log, args->entries[i].term, &args->entries[i].command);
   }
   /* If leaderCommit > commitIndex, set commitIndex = minInt(leaderCommit, index of last new entry) */
   if (args->leaderCommit > raftNode.commitIndex) {
-    DEBUG_PRINT("raftProcessAppendEntries: Leader commit = %u > commitIndex = %u, update.\n",
-                args->leaderCommit,
-                raftNode.commitIndex);
+//    DEBUG_PRINT("raftProcessAppendEntries: Leader commit = %u > commitIndex = %u, update.\n",
+//                args->leaderCommit,
+//                raftNode.commitIndex);
     raftNode.commitIndex = MIN(args->leaderCommit, raftNode.log.items[raftNode.log.size - 1].index);
   }
   raftApplyLog();
@@ -861,39 +909,39 @@ void raftSendAppendEntriesReply(UWB_Address_t peerAddress, uint16_t term, bool s
   reply->success = success;
   reply->nextIndex = nextIndex;
   reply->stability = getCurrentStabilityMetric();
-  DEBUG_PRINT("raftSendAppendEntriesReply: %u send append entries reply to %u, term = %u, success = %d, nextIndex = %u, stability = %.2f.\n",
-      raftNode.me,
-      peerAddress,
-      term,
-      success,
-      nextIndex,
-      reply->stability);
+//  DEBUG_PRINT("raftSendAppendEntriesReply: %u send append entries reply to %u, term = %u, success = %d, nextIndex = %u, stability = %.2f.\n",
+//      raftNode.me,
+//      peerAddress,
+//      term,
+//      success,
+//      nextIndex,
+//      reply->stability);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entries_Reply_t *reply) {
-  DEBUG_PRINT("raftProcessAppendEntriesReply: %u received append entries reply from %u.\n", raftNode.me, peerAddress);
+//  DEBUG_PRINT("raftProcessAppendEntriesReply: %u received append entries reply from %u.\n", raftNode.me, peerAddress);
   if (!raftConfigHasPeer(peerAddress)) {
-    DEBUG_PRINT("raftProcessAppendEntriesReply: Peer %u not in current config, ignore.\n", peerAddress);
+//    DEBUG_PRINT("raftProcessAppendEntriesReply: Peer %u not in current config, ignore.\n", peerAddress);
     return;
   }
   if (reply->term < raftNode.currentTerm) {
-    DEBUG_PRINT("raftProcessAppendEntriesReply: Peer term = %u < my term = %u, ignore.\n",
-                reply->term,
-                raftNode.currentTerm);
+//    DEBUG_PRINT("raftProcessAppendEntriesReply: Peer term = %u < my term = %u, ignore.\n",
+//                reply->term,
+//                raftNode.currentTerm);
     return;
   }
   /* If RPC request or response contains term T > currentTerm, set currentTerm = T, convert to follower. */
   if (reply->term > raftNode.currentTerm) {
-    DEBUG_PRINT("raftProcessAppendEntriesReply: Peer term = %u > my term = %u, convert to follower.\n",
-                reply->term,
-                raftNode.currentTerm
-    );
+//    DEBUG_PRINT("raftProcessAppendEntriesReply: Peer term = %u > my term = %u, convert to follower.\n",
+//                reply->term,
+//                raftNode.currentTerm
+//    );
     raftNode.currentTerm = reply->term;
     convertToFollower(&raftNode);
   }
   if (raftNode.currentState != RAFT_STATE_LEADER) {
-    DEBUG_PRINT("raftProcessAppendEntriesReply: %u is not a leader now, ignore.\n", raftNode.me);
+//    DEBUG_PRINT("raftProcessAppendEntriesReply: %u is not a leader now, ignore.\n", raftNode.me);
     return;
   }
   raftNode.peerStability[peerAddress] = reply->stability;
@@ -912,21 +960,21 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
      */
     int matchedIndex = raftLogFindByIndex(&raftNode.log, raftNode.matchIndex[peerAddress]);
     if (matchedIndex == -1) {
-      DEBUG_PRINT("raftProcessAppendEntriesReply: %u cannot find log with matchIndex = %u.\n",
-                  raftNode.me,
-                  raftNode.matchIndex[peerAddress]
-      );
+//      DEBUG_PRINT("raftProcessAppendEntriesReply: %u cannot find log with matchIndex = %u.\n",
+//                  raftNode.me,
+//                  raftNode.matchIndex[peerAddress]
+//      );
     } else {
       int itemIndex = raftLogGetLastLogItemByTerm(&raftNode.log, raftNode.log.items[matchedIndex].term - 1);
       if (itemIndex == -1) {
-        DEBUG_PRINT("raftProcessAppendEntriesReply: %u cannot find log with term = %u.\n",
-                    raftNode.me,
-                    raftNode.log.items[matchedIndex].term - 1
-        );
+//        DEBUG_PRINT("raftProcessAppendEntriesReply: %u cannot find log with term = %u.\n",
+//                    raftNode.me,
+//                    raftNode.log.items[matchedIndex].term - 1
+//        );
       } else {
         if (reply->nextIndex != 0) {
           if (reply->nextIndex < raftNode.matchIndex[peerAddress]) {
-            DEBUG_PRINT("raftProcessAppendEntriesReply: Peer %u may restart, resync all log entries.\n", peerAddress);
+//            DEBUG_PRINT("raftProcessAppendEntriesReply: Peer %u may restart, resync all log entries.\n", peerAddress);
             raftNode.nextIndex[peerAddress] = 1;
             raftNode.matchIndex[peerAddress] = 0;
           } else {
@@ -935,7 +983,7 @@ void raftProcessAppendEntriesReply(UWB_Address_t peerAddress, Raft_Append_Entrie
           }
         } else {
           raftNode.nextIndex[peerAddress] = raftNode.log.items[itemIndex].index;
-          DEBUG_PRINT("raftProcessAppendEntriesReply: Try to adjust next index to %u.\n", raftNode.nextIndex[peerAddress]);
+//          DEBUG_PRINT("raftProcessAppendEntriesReply: Try to adjust next index to %u.\n", raftNode.nextIndex[peerAddress]);
         }
       }
     }
@@ -950,30 +998,30 @@ void raftSendCommand(Raft_Command_Args_t *args) {
   dataTxPacket.header.ttl = 10;
   dataTxPacket.header.length = sizeof(UWB_Data_Packet_Header_t) + sizeof(Raft_Command_Args_t);
   memcpy(dataTxPacket.payload, args, sizeof (Raft_Command_Args_t));
-  DEBUG_PRINT("raftSendCommand: %u send command to leader %u, requestId = %u.\n",
-              raftNode.me,
-              raftNode.currentLeader,
-              args->command.requestId);
+//  DEBUG_PRINT("raftSendCommand: %u send command to leader %u, requestId = %u.\n",
+//              raftNode.me,
+//              raftNode.currentLeader,
+//              args->command.requestId);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessCommand(UWB_Address_t clientId, Raft_Command_Args_t *args) {
-  DEBUG_PRINT("raftProcessCommand: %u received command from client %u, requestId = %u.\n",
-              raftNode.me,
-              clientId,
-              args->command.requestId);
+//  DEBUG_PRINT("raftProcessCommand: %u received command from client %u, requestId = %u.\n",
+//              raftNode.me,
+//              clientId,
+//              args->command.requestId);
   if (raftNode.currentLeader != raftNode.me) {
-    DEBUG_PRINT("raftProcessCommand: %u is not the leader, current leader is %u.\n",
-                raftNode.me,
-                raftNode.currentLeader);
+//    DEBUG_PRINT("raftProcessCommand: %u is not the leader, current leader is %u.\n",
+//                raftNode.me,
+//                raftNode.currentLeader);
     raftSendCommandReply(clientId, raftNode.latestAppliedRequestId[clientId], raftNode.currentLeader, false);
     return;
   }
   if (args->command.requestId <= raftNode.latestAppliedRequestId[clientId]) {
-    DEBUG_PRINT("raftProcessCommand: %u received duplicated command from client %u, requestId = %u.\n",
-                raftNode.me,
-                clientId,
-                args->command.requestId);
+//    DEBUG_PRINT("raftProcessCommand: %u received duplicated command from client %u, requestId = %u.\n",
+//                raftNode.me,
+//                clientId,
+//                args->command.requestId);
     raftSendCommandReply(clientId, raftNode.latestAppliedRequestId[clientId], raftNode.me, true);
     return;
   }
@@ -1009,29 +1057,29 @@ void raftSendCommandReply(UWB_Address_t clientId, uint16_t latestApplied, UWB_Ad
   reply->latestApplied = latestApplied;
   reply->leaderAddress = leaderAddress;
   reply->success = success;
-  DEBUG_PRINT("raftSendCommandReply: %u send command reply to client %u, latestApplied = %u, leader = %u, success = %d.\n",
-              raftNode.me,
-              clientId,
-              latestApplied,
-              leaderAddress,
-              success);
+//  DEBUG_PRINT("raftSendCommandReply: %u send command reply to client %u, latestApplied = %u, leader = %u, success = %d.\n",
+//              raftNode.me,
+//              clientId,
+//              latestApplied,
+//              leaderAddress,
+//              success);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessCommandReply(UWB_Address_t peerAddress, Raft_Command_Reply_t *reply) {
-  DEBUG_PRINT("raftProcessCommandReply: %u received command reply from %u, latestApplied = %u, leader = %u.\n",
-              raftNode.me,
-              peerAddress,
-              reply->latestApplied,
-              reply->leaderAddress);
+//  DEBUG_PRINT("raftProcessCommandReply: %u received command reply from %u, latestApplied = %u, leader = %u.\n",
+//              raftNode.me,
+//              peerAddress,
+//              reply->latestApplied,
+//              reply->leaderAddress);
   if (reply->success) {
     raftLeaderApply = MAX(raftLeaderApply, reply->latestApplied);
   } else {
     if (reply->leaderAddress != raftNode.currentLeader) {
-      DEBUG_PRINT("raftProcessCommandReply: %u think current leader is %u not %u.\n",
-                  peerAddress,
-                  reply->leaderAddress,
-                  raftNode.currentLeader);
+//      DEBUG_PRINT("raftProcessCommandReply: %u think current leader is %u not %u.\n",
+//                  peerAddress,
+//                  reply->leaderAddress,
+//                  raftNode.currentLeader);
       // TODO: ignore or retry?
     }
   }
