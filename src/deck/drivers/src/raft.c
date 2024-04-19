@@ -368,24 +368,24 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("raftHeartbeatTimerCallback: %u trigger heartbeat timer at %lu.\n", raftNode.me, xTaskGetTickCount());
 //DEBUG_PRINT("leader = %u, my \n", );
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
-//  printRaftConfig(raftNode.config);
-//  printRaftLog(&raftNode.log);
+  printRaftConfig(raftNode.config);
+  printRaftLog(&raftNode.log);
   printRoutingTable(getGlobalRoutingTable());
-  DEBUG_PRINT("lowerCount = %u\n", raftNode.lowerCount);
-  DEBUG_PRINT("neighbor \t stability \t\n");
+//  DEBUG_PRINT("lowerCount = %u\n", raftNode.lowerCount);
+//  DEBUG_PRINT("neighbor \t stability \t\n");
   for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
     if (peer != raftNode.me && raftConfigHasPeer(peer)) {
-      DEBUG_PRINT("%u \t %.2f \t\n", peer, raftNode.peerStability[peer]);
+//      DEBUG_PRINT("%u \t %.2f \t\n", peer, raftNode.peerStability[peer]);
     }
   }
-  DEBUG_PRINT("%u \t %.2f \t\n", raftNode.me, getCurrentStabilityMetric());
-  DEBUG_PRINT("\n");
+//  DEBUG_PRINT("%u \t %.2f \t\n", raftNode.me, getCurrentStabilityMetric());
+//  DEBUG_PRINT("\n");
   if (raftNode.currentState == RAFT_STATE_LEADER) {
     if (!raftStabilityCheck()) {
       raftNode.lowerCount++;
     }
     if (raftFullConsensusCheck()) {
-      DEBUG_PRINT("raftFullConsensusCheck\n");
+//      DEBUG_PRINT("raftFullConsensusCheck\n");
     }
     if (!raftFullConsensusCheck() || raftNode.lowerCount < RAFT_AUTO_LEADERSHIP_CHANGE_THRESHOLD) {
       for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
@@ -1009,7 +1009,7 @@ void raftSendCommandReply(UWB_Address_t clientId, uint16_t latestApplied, UWB_Ad
   reply->latestApplied = latestApplied;
   reply->leaderAddress = leaderAddress;
   reply->success = success;
-  DEBUG_PRINT("raftSendRequestVote: %u send command reply to client %u, latestApplied = %u, leader = %u, success = %d.\n",
+  DEBUG_PRINT("raftSendCommandReply: %u send command reply to client %u, latestApplied = %u, leader = %u, success = %d.\n",
               raftNode.me,
               clientId,
               latestApplied,
