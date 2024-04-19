@@ -405,7 +405,7 @@ static void raftElectionTimerCallback(TimerHandle_t timer) {
   xSemaphoreTake(raftNode.mu, portMAX_DELAY);
   Time_t curTime = xTaskGetTickCount();
   if (raftNode.currentState != RAFT_STATE_LEADER) {
-    if (curTime > raftNode.lastHeartbeatTime + rand() % RAFT_HEARTBEAT_INTERVAL + RAFT_ELECTION_TIMEOUT) {
+    if (curTime > (raftNode.lastHeartbeatTime + rand() % (RAFT_HEARTBEAT_INTERVAL * 2) + RAFT_ELECTION_TIMEOUT)) {
 //      DEBUG_PRINT("raftElectionTimerCallback: %u timeout in term %u, commitIndex = %u.\n",
 //                  raftNode.me,
 //                  raftNode.currentTerm,
@@ -522,10 +522,10 @@ static void testProposeEmptyLog() {
   uint16_t requestId = 0;
   while (1) {
     if (success) {
-      requestId = raftProposeNew(RAFT_LOG_COMMAND_RESERVED, NULL, 0);
+      requestId = raftProposeNew(RAFT_LOG_COMMAND_NO_OPS, NULL, 0);
       success = false;
     } else {
-      raftProposeRetry(requestId, RAFT_LOG_COMMAND_RESERVED, NULL, 0);
+      raftProposeRetry(requestId, RAFT_LOG_COMMAND_NO_OPS, NULL, 0);
     }
     success = raftProposeCheck(requestId, 100);
     consolePrintf("raftTestTask: proposed requestId = %u, success = %d.\n",
@@ -538,7 +538,7 @@ static void testProposeEmptyLog() {
   }
 }
 
-static uint16_t target = 50;
+static uint16_t target = 100;
 
 static void raftTestTask() {
   systemWaitStart();
@@ -548,14 +548,13 @@ static void raftTestTask() {
   Time_t startTime = xTaskGetTickCount();
   Time_t endTime = 0;
   while (1) {
+    if (endTime == 0 && raftNode.commitIndex >= target) {
+      endTime = xTaskGetTickCount();
+    }
     if (endTime == 0) {
       if (raftNode.currentState == RAFT_STATE_LEADER && raftNode.log.size <= target && raftNode.commitIndex <= target) {
         testProposeEmptyLog();
         consolePrintf("current log len = %u.\n", raftNode.log.size);
-        vTaskDelay(M2T(10));
-      }
-      if (raftNode.commitIndex == target) {
-        endTime = xTaskGetTickCount();
       }
     } else {
       consolePrintf("totalTime = %u\n", T2M(endTime) - T2M(startTime));
@@ -678,6 +677,7 @@ void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t 
     );
     raftNode.currentTerm = args->term;
     convertToFollower(&raftNode);
+    raftNode.voteFor = args->candidateId;
     raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, true);
     return;
   }
@@ -696,10 +696,13 @@ void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t 
     raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, false);
     return;
   }
-  raftNode.voteFor = args->candidateId;
-  raftNode.lastHeartbeatTime = xTaskGetTickCount();
-  DEBUG_PRINT("raftProcessRequestVote: %u grant vote to %u.\n", raftNode.me, args->candidateId);
-  raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, true);
+  if (raftNode.currentState != RAFT_STATE_CANDIDATE) {
+    convertToFollower(&raftNode);
+    raftNode.voteFor = args->candidateId;
+    raftNode.lastHeartbeatTime = xTaskGetTickCount();
+    DEBUG_PRINT("raftProcessRequestVote: %u grant vote to %u.\n", raftNode.me, args->candidateId);
+    raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, true);
+  }
 }
 
 void raftSendRequestVoteReply(UWB_Address_t peerAddress, uint16_t term, bool voteGranted) {

@@ -16,13 +16,19 @@
 #define ENABLE_RANGING_STAT
 #define ENABLE_SIMULATION
 #ifdef ENABLE_SIMULATION
-  #define SIMULATION_X_BOUND 500 // in cm
-  #define SIMULATION_Y_BOUND 500 // in cm
+  #define SIMULATION_X_BOUND 800 // in cm
+  #define SIMULATION_Y_BOUND 800 // in cm
   #define SIMULATION_TICK 1000 // in ms
-  #define SIMULATION_VELOCITY_X 50 // in cm/s
-  #define SIMULATION_VELOCITY_Y 50 // in cm/s
+  #define SIMULATION_VELOCITY_X 71 // in cm/s
+  #define SIMULATION_VELOCITY_Y 71 // in cm/s
   #define SIMULATION_JITTER 15 // in cm
 #endif
+
+// 71 = 100cm/s
+// 57 = 80cm/s
+// 43 = 60cm/s
+// 28 = 40cm/s
+// 14 = 20cm/s
 
 /* Ranging Constants */
 #define RANGING_PERIOD 200 // default in 200ms
