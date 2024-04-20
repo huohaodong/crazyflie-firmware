@@ -20,8 +20,8 @@
   #define SIMULATION_X_BOUND 800 // in cm
   #define SIMULATION_Y_BOUND 800 // in cm
   #define SIMULATION_TICK 1000 // in ms
-  #define SIMULATION_VELOCITY_X 28 // in cm/s
-  #define SIMULATION_VELOCITY_Y 28 // in cm/s
+  #define SIMULATION_VELOCITY_X 43 // in cm/s
+  #define SIMULATION_VELOCITY_Y 43 // in cm/s
   #define SIMULATION_JITTER 15 // in cm
 #endif
 
