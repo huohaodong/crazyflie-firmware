@@ -16,11 +16,12 @@
 #define ENABLE_RANGING_STAT
 #define ENABLE_SIMULATION
 #ifdef ENABLE_SIMULATION
+  #define SIMULATION_MASTER 0
   #define SIMULATION_X_BOUND 800 // in cm
   #define SIMULATION_Y_BOUND 800 // in cm
   #define SIMULATION_TICK 1000 // in ms
-  #define SIMULATION_VELOCITY_X 43 // in cm/s
-  #define SIMULATION_VELOCITY_Y 43 // in cm/s
+  #define SIMULATION_VELOCITY_X 71 // in cm/s
+  #define SIMULATION_VELOCITY_Y 71 // in cm/s
   #define SIMULATION_JITTER 15 // in cm
 #endif
 
@@ -82,6 +83,11 @@ typedef struct {
   uint16_t filter; // 16 bits bloom filter
   float x;
   float y;
+  uint16_t X_BOUND;
+  uint16_t Y_BOUND;
+  uint16_t VELOCITY_X;
+  uint16_t VELOCITY_Y;
+  bool master;
 } __attribute__((packed)) Ranging_Message_Header_t; // 10 byte + 10 byte * MAX_Tr_UNIT
 
 /* Ranging Message */

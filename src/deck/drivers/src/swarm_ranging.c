@@ -67,6 +67,10 @@ static Ranging_Table_t EMPTY_RANGING_TABLE = {
 static TimerHandle_t simulationTimer;
 static float simulationX;
 static float simulationY;
+static uint16_t X_BOUND = SIMULATION_X_BOUND;
+static uint16_t Y_BOUND = SIMULATION_Y_BOUND;;
+static uint16_t VELOCITY_X = SIMULATION_VELOCITY_X;
+static uint16_t VELOCITY_Y = SIMULATION_VELOCITY_Y;
 #endif
 
 int16_t distanceTowards[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
@@ -158,12 +162,12 @@ static void simulationTimerCallback(TimerHandle_t timer) {
   int8_t xDirection = rand() % 2 == 0 ? 1 : -1;
   int8_t yDirection = rand() % 2 == 0 ? 1 : -1;
 //  DEBUG_PRINT("xDirection = %d, yDirection = %d\n", xDirection, yDirection);
-  simulationX += 1.0f * xDirection * (SIMULATION_VELOCITY_X * SIMULATION_TICK) / 1000.0f;
-  simulationY += 1.0f * yDirection * (SIMULATION_VELOCITY_Y * SIMULATION_TICK) / 1000.0f;
+  simulationX += 1.0f * xDirection * (VELOCITY_X * SIMULATION_TICK) / 1000.0f;
+  simulationY += 1.0f * yDirection * (VELOCITY_Y * SIMULATION_TICK) / 1000.0f;
   simulationX = MAX(simulationX, 0.0f);
-  simulationX = MIN(simulationX, SIMULATION_X_BOUND);
+  simulationX = MIN(simulationX, X_BOUND);
   simulationY = MAX(simulationY, 0.0f);
-  simulationY = MIN(simulationY, SIMULATION_Y_BOUND);
+  simulationY = MIN(simulationY, Y_BOUND);
   DEBUG_PRINT("curX = %.2f, curY = %.2f\n", simulationX, simulationY);
 }
 
@@ -1232,6 +1236,19 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   neighborRangingTable->period = MIN(neighborRangingTable->period, M2T(RANGING_PERIOD_MAX));
   #endif
   #ifdef ENABLE_SIMULATION
+  if (rangingMessage->header.master) {
+    if (X_BOUND != rangingMessage->header.X_BOUND ||
+        Y_BOUND != rangingMessage->header.Y_BOUND ||
+        VELOCITY_X != rangingMessage->header.VELOCITY_X ||
+        VELOCITY_Y != rangingMessage->header.VELOCITY_Y) {
+      X_BOUND = rangingMessage->header.X_BOUND;
+      Y_BOUND = rangingMessage->header.Y_BOUND;
+      VELOCITY_X = rangingMessage->header.VELOCITY_X;
+      VELOCITY_Y = rangingMessage->header.VELOCITY_Y;
+      simulationX = rand() % X_BOUND;
+      simulationY = rand() % Y_BOUND;
+    }
+  }
   float distance = sqrtf(
       (simulationX - rangingMessage->header.x) * (simulationX - rangingMessage->header.x) +
           (simulationY - rangingMessage->header.y) * (simulationY - rangingMessage->header.y));
@@ -1357,6 +1374,11 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
   #ifdef ENABLE_SIMULATION
   rangingMessage->header.x = simulationX;
   rangingMessage->header.y = simulationY;
+  rangingMessage->header.X_BOUND = X_BOUND;
+  rangingMessage->header.Y_BOUND = Y_BOUND;
+  rangingMessage->header.VELOCITY_X = VELOCITY_X;
+  rangingMessage->header.VELOCITY_Y = VELOCITY_Y;
+  rangingMessage->header.master = SIMULATION_MASTER;
   #endif
   /* Keeps ranging table in order to perform binary search */
   rangingTableSetRearrange(&rangingTableSet, COMPARE_BY_ADDRESS);
