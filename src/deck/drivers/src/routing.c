@@ -12,6 +12,7 @@
 #include "routing.h"
 #include "olsr.h"
 #include "aodv.h"
+#include "routing_bench.h"
 
 #ifndef ROUTING_DEBUG_ENABLE
   #undef DEBUG_PRINT
@@ -383,6 +384,9 @@ void routingInit() {
   #endif
   #ifdef ROUTING_OLSR_ENABLE
   olsrInit();
+  #endif
+  #ifdef ROUTING_BENCH_ENABLE
+  routingBenchInit();
   #endif
 }
 
