@@ -217,6 +217,9 @@ static void raftLogAppend(Raft_Log_t *raftLog, uint16_t logTerm, Raft_Log_Comman
   if (raftNode.currentState == RAFT_STATE_LEADER && raftLog->size >= RAFT_LOG_SIZE_MAX * 0.75) {
     // TODO: snapshot
   }
+  if (raftLog->size >= RAFT_LOG_SIZE_MAX) {
+    return;
+  }
   int index = raftLog->size;
   raftLog->items[index].term = logTerm;
   raftLog->items[index].index = raftLog->items[index - 1].index + 1;
@@ -382,6 +385,7 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
 //  DEBUG_PRINT("%u \t %.2f \t\n", raftNode.me, getCurrentStabilityMetric());
 //  DEBUG_PRINT("\n");
   if (raftNode.currentState == RAFT_STATE_LEADER) {
+    #ifdef ENABLE_RAFT_AUTO_LEADERSHIP
     if (!raftStabilityCheck()) {
       raftNode.lowerCount++;
     }
@@ -393,6 +397,14 @@ static void raftHeartbeatTimerCallback(TimerHandle_t timer) {
         }
       }
     }
+    #else
+    for (int peer = 0; peer <= RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX; peer++) {
+      if (peer != raftNode.me && raftConfigHasPeer(peer)) {
+        raftSendAppendEntries(peer);
+        vTaskDelay(M2T(5));
+      }
+    }
+    #endif
   }
   xSemaphoreGive(raftNode.mu);
 }
@@ -652,6 +664,7 @@ void raftSendRequestVote(UWB_Address_t peerAddress) {
   args->candidateId = raftNode.me;
   args->lastLogIndex = raftNode.log.items[raftNode.log.size - 1].index;
   args->lastLogTerm = raftNode.log.items[raftNode.log.size - 1].term;
+  args->stability = getCurrentStabilityMetric();
   DEBUG_PRINT("raftSendRequestVote: %u send request vote to %u.\n", raftNode.me, peerAddress);
   uwbSendDataPacketBlock(&dataTxPacket);
 }
@@ -681,7 +694,7 @@ void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t 
     raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, true);
     return;
   }
-  if (raftNode.voteFor != RAFT_VOTE_FOR_NO_ONE && raftNode.voteFor != args->candidateId) {
+  if (raftNode.voteFor != RAFT_VOTE_FOR_NO_ONE || raftNode.voteFor != args->candidateId) {
     DEBUG_PRINT("raftProcessRequestVote: I %u have already granted vote to %u this term, don't grant vote.\n",
                 raftNode.me,
                 raftNode.voteFor);
@@ -696,7 +709,7 @@ void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t 
     raftSendRequestVoteReply(args->candidateId, raftNode.currentTerm, false);
     return;
   }
-  if (raftNode.currentState != RAFT_STATE_CANDIDATE) {
+  if (raftNode.currentState != RAFT_STATE_CANDIDATE && args->stability >= getCurrentStabilityMetric()) {
     convertToFollower(&raftNode);
     raftNode.voteFor = args->candidateId;
     raftNode.lastHeartbeatTime = xTaskGetTickCount();

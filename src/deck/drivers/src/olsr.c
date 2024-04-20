@@ -362,7 +362,7 @@ static void olsrSendTc() {
 
 static void olsrProcessTC(UWB_Address_t neighborAddress, OLSR_TC_Message_t *tcMsg) {
   /* 1. If the sender (not originator) of this message is not in the symmetric 1-hop neighborhood of this node, discard this tc message. */
-  if (!neighborSetHasOneHop(neighborSet, neighborAddress)) {
+  if (neighborAddress <= NEIGHBOR_ADDRESS_MAX && !neighborSetHasOneHop(neighborSet, neighborAddress)) {
     DEBUG_PRINT("olsrProcessTC: %u discard tc from non-one-hop neighbor %u.\n", uwbGetAddress(), neighborAddress);
     return;
   }
@@ -756,6 +756,7 @@ static void olsrRxTask(void *parameters) {
         case OLSR_TC_MESSAGE:DEBUG_PRINT("olsrRxTask: %u received TC from %u.\n",
                                          uwbGetAddress(),
                                          msgHeader->srcAddress);
+          ASSERT(rxPacketCache.header.srcAddress <= NEIGHBOR_ADDRESS_MAX);
           olsrProcessTC(rxPacketCache.header.srcAddress, (OLSR_TC_Message_t *) &olsrPacket->payload);
           break;
         default:DEBUG_PRINT("olsrRxTask: %u received unknown olsr message type from %u.\n",

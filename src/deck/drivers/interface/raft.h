@@ -18,7 +18,7 @@
 #define RAFT_CLUSTER_PEER_NODE_ADDRESS_MAX 31
 #define RAFT_VOTE_FOR_NO_ONE UWB_DEST_EMPTY
 #define RAFT_HEARTBEAT_INTERVAL 150 // default 150ms
-#define RAFT_ELECTION_TIMEOUT (20 * RAFT_HEARTBEAT_INTERVAL)
+#define RAFT_ELECTION_TIMEOUT (15 * RAFT_HEARTBEAT_INTERVAL)
 #define RAFT_LOG_APPLY_INTERVAL 50 // default 50ms
 #define RAFT_LOG_COMMAND_PAYLOAD_SIZE_MAX 2 // TODO: fine tuning
 #define RAFT_LOG_ENTRIES_SIZE_MAX ((ROUTING_DATA_PACKET_PAYLOAD_SIZE_MAX - 28) / sizeof(Raft_Log_Item_t))
@@ -26,9 +26,7 @@
 
 /* Function Switch */
 #define ENABLE_RAFT_AUTO_LEADERSHIP
-#ifdef ENABLE_RAFT_AUTO_LEADERSHIP
-  #define RAFT_AUTO_LEADERSHIP_CHANGE_THRESHOLD 80
-#endif
+#define RAFT_AUTO_LEADERSHIP_CHANGE_THRESHOLD 250
 
 typedef enum {
   RAFT_STATE_FOLLOWER,
@@ -116,6 +114,7 @@ typedef struct {
   UWB_Address_t candidateId; /* candidate that requesting vote */
   uint16_t lastLogIndex; /* index of candidate's last log entry */
   uint16_t lastLogTerm; /* term of candidate's last log entry */
+  float stability;
 } __attribute__((packed)) Raft_Request_Vote_Args_t;
 
 typedef struct {

@@ -20,8 +20,8 @@
   #define SIMULATION_X_BOUND 800 // in cm
   #define SIMULATION_Y_BOUND 800 // in cm
   #define SIMULATION_TICK 1000 // in ms
-  #define SIMULATION_VELOCITY_X 71 // in cm/s
-  #define SIMULATION_VELOCITY_Y 71 // in cm/s
+  #define SIMULATION_VELOCITY_X 14 // in cm/s
+  #define SIMULATION_VELOCITY_Y 14 // in cm/s
   #define SIMULATION_JITTER 15 // in cm
 #endif
 
@@ -51,7 +51,7 @@
 #define Tf_BUFFER_POOL_SIZE (2 * RANGING_PERIOD_MAX / RANGING_PERIOD_MIN)
 
 /* Topology Sensing */
-#define NEIGHBOR_ADDRESS_MAX 32
+#define NEIGHBOR_ADDRESS_MAX 16
 #define NEIGHBOR_SET_HOLD_TIME (6 * RANGING_PERIOD_MAX)
 
 typedef short set_index_t;

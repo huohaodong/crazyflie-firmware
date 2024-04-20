@@ -104,7 +104,7 @@ static void rxCallback() {
     return;
   }
 
-  if (getDistance(packet->header.srcAddress) != -1 &&
+  if (msgType != UWB_RANGING_MESSAGE && getDistance(packet->header.srcAddress) != -1 &&
       random() % 100 < getPacketLossRate(packet->header.srcAddress) * 100) {
     dwt_forcetrxoff();
     dwt_rxenable(DWT_START_RX_IMMEDIATE);
