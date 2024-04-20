@@ -666,7 +666,7 @@ void raftSendRequestVote(UWB_Address_t peerAddress) {
   args->lastLogTerm = raftNode.log.items[raftNode.log.size - 1].term;
   args->stability = getCurrentStabilityMetric();
   DEBUG_PRINT("raftSendRequestVote: %u send request vote to %u.\n", raftNode.me, peerAddress);
-  uwbSendDataPacketBlock(&dataTxPacket)
+  uwbSendDataPacketBlock(&dataTxPacket);
 }
 
 void raftProcessRequestVote(UWB_Address_t peerAddress, Raft_Request_Vote_Args_t *args) {
