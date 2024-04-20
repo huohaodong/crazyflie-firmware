@@ -158,6 +158,7 @@ static void statTimerCallback(TimerHandle_t timer) {
 }
 
 static void simulationTimerCallback(TimerHandle_t timer) {
+  #ifdef ENABLE_SIMULATION
 //  printRangingStat();
   int8_t xDirection = rand() % 2 == 0 ? 1 : -1;
   int8_t yDirection = rand() % 2 == 0 ? 1 : -1;
@@ -169,6 +170,7 @@ static void simulationTimerCallback(TimerHandle_t timer) {
   simulationY = MAX(simulationY, 0.0f);
   simulationY = MIN(simulationY, Y_BOUND);
   DEBUG_PRINT("curX = %.2f, curY = %.2f\n", simulationX, simulationY);
+  #endif
 }
 
 int16_t getDistance(UWB_Address_t neighborAddress) {
@@ -1496,11 +1498,11 @@ void rangingInit() {
                            (void *) 0,
                            statTimerCallback);
   xTimerStart(statTimer, M2T(0));
+#endif
+#ifdef ENABLE_SIMULATION
   srand(uwbGetAddress());
   simulationX = rand() % SIMULATION_X_BOUND;
   simulationY = rand() % SIMULATION_Y_BOUND;
-#endif
-#ifdef ENABLE_SIMULATION
   simulationTimer = xTimerCreate("simulationTimer",
                                  M2T(SIMULATION_TICK),
                                  pdTRUE,

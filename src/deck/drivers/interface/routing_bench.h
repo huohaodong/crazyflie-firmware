@@ -21,12 +21,14 @@ typedef struct {
 typedef struct {
   Mock_Data_Header_t header;
   Time_t txTime;
+  uint32_t sendCount; /* number of request send to corresponding neighbor */
 } __attribute__((packed)) Mock_Data_Request_t;
 
 typedef struct {
   Mock_Data_Header_t header;
   Time_t txTime; /* tx time of corresponding request */
-  uint32_t recvCount; /* message received from corresponding neighbor */
+  uint32_t recvCount; /* number of request received from corresponding neighbor */
+  double PDR; /* Packet Delivery Rate of corresponding neighbor to me */
 } __attribute__((packed)) Mock_Data_Reply_t;
 
 void routingBenchInit();
