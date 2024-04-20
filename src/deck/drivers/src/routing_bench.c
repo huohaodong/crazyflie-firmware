@@ -22,8 +22,10 @@ static uint32_t totalSendCount = 0;
 static uint32_t totalRecvCount = 0;
 static uint32_t recvCount[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
 static uint32_t sendCount[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
-static double AVG_RTT[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0}; /* Average Round-trip time */
+static uint32_t RTT_COUNT[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
+static double AVG_RTT[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0.0}; /* Average Round-trip time */
 static double PDR[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0.0}; /* Packet Delivery Rate */
+static uint16_t lastRecvSeq[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
 
 static void sendMockDataRequest(UWB_Address_t neighborAddress) {
   UWB_Data_Packet_t dataTxPacket;
@@ -60,11 +62,10 @@ static void processMockDataRequest(UWB_Address_t neighborAddress, Mock_Data_Requ
 }
 
 static void processMockDataReply(UWB_Address_t neighborAddress, Mock_Data_Reply_t *reply) {
-
-  // TODO: AVG_RTT
   Time_t curTime = xTaskGetTickCount();
-  uint16_t rtt = T2M(curTime - reply->txTime);
-
+  uint32_t rtt = T2M(curTime - reply->txTime);
+  RTT_COUNT[neighborAddress]++;
+  AVG_RTT[neighborAddress] = AVG_RTT[neighborAddress] + (rtt - AVG_RTT[neighborAddress]) * 1.0 / RTT_COUNT[neighborAddress];
   PDR[neighborAddress] = reply->PDR;
 }
 
@@ -98,20 +99,23 @@ static void benchRxTask(void *parameters) {
       UWB_Address_t neighborAddress = dataRxPacket.header.srcAddress;
       totalRecvCount++;
       switch (msgType) {
-        case MOCK_DATA_REQUEST:DEBUG_PRINT("%u received mock data request from %u.\n",
-                                           uwbGetAddress(),
-                                           dataRxPacket.header.srcAddress);
+        case MOCK_DATA_REQUEST:
+//          DEBUG_PRINT("%u received mock data request from %u.\n",
+//                                           uwbGetAddress(),
+//                                           dataRxPacket.header.srcAddress);
           recvCount[neighborAddress]++;
           processMockDataRequest(dataRxPacket.header.srcAddress,
                                  (Mock_Data_Request_t *) dataRxPacket.payload);
           break;
-        case MOCK_DATA_REPLY:DEBUG_PRINT("%u received mock data reply from %u.\n",
-                                         uwbGetAddress(),
-                                         dataRxPacket.header.srcAddress);
+        case MOCK_DATA_REPLY:
+//          DEBUG_PRINT("%u received mock data reply from %u.\n",
+//                                         uwbGetAddress(),
+//                                         dataRxPacket.header.srcAddress);
           processMockDataReply(dataRxPacket.header.srcAddress,
                                (Mock_Data_Reply_t *) dataRxPacket.payload);
           break;
-        default:DEBUG_PRINT("%u received unknown mock data type = %u from %u.\n",
+        default:
+          DEBUG_PRINT("%u received unknown mock data type = %u from %u.\n",
                             uwbGetAddress(), msgType,
                             dataRxPacket.header.srcAddress);
       }
@@ -122,7 +126,21 @@ static void benchRxTask(void *parameters) {
 }
 
 static void printTimerCallback(TimerHandle_t timer) {
-  // TODO
+  double totalRTT = 0.0;
+  double totalPDR = 0.0;
+  uint16_t count = 0;
+  DEBUG_PRINT("neighbor\t AVG_RTT \t PDR\n");
+  for (UWB_Address_t neighbor = 0; neighbor <= NEIGHBOR_ADDRESS_MAX; neighbor++) {
+    if (neighbor == uwbGetAddress() || recvCount[neighbor] == 0) {
+      continue;
+    }
+    DEBUG_PRINT("%u\t %.2f\t %.2f\t\n", neighbor, AVG_RTT[neighbor], PDR[neighbor]);
+    totalRTT += AVG_RTT[neighbor];
+    totalPDR += PDR[neighbor];
+    count++;
+  }
+  DEBUG_PRINT("%u total send = %lu, total recv = %lu, total avg rtt = %.2f, total avg pdr = %.2f.\n\n",
+              uwbGetAddress(), totalSendCount, totalRecvCount, totalRTT / count, totalPDR / count);
 }
 
 void routingBenchInit() {
