@@ -526,7 +526,7 @@ void neighborBitSetClear(Neighbor_Bit_Set_t *bitSet) {
 }
 
 bool neighborBitSetHas(Neighbor_Bit_Set_t *bitSet, UWB_Address_t neighborAddress) {
-//  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
   return (bitSet->bits & (1ULL << neighborAddress)) != 0;
 }
 
@@ -558,7 +558,7 @@ bool neighborSetHas(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
 }
 
 bool neighborSetHasOneHop(Neighbor_Set_t *set, UWB_Address_t neighborAddress) {
-//  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
+  ASSERT(neighborAddress <= NEIGHBOR_ADDRESS_MAX);
   return neighborBitSetHas(&set->oneHop, neighborAddress);
 }
 
