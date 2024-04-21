@@ -192,7 +192,7 @@ static void computeRoutingTable() {
     }
   }
   DEBUG_PRINT("\n");
-
+  float curWeight[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 666666.6f};
   UWB_Address_t prevHopOf[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = UWB_DEST_EMPTY};
   bool visited[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = false};
   #ifdef OLSR_ROUTING_COMPUTATION_USE_HOP
@@ -232,7 +232,6 @@ static void computeRoutingTable() {
     }
   }
   #else
-  float curWeight[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 666666.6f};
   /* Init path etx for one-hop neighbors */
   for (UWB_Address_t oneHopNeighbor = 0; oneHopNeighbor <= NEIGHBOR_ADDRESS_MAX; oneHopNeighbor++) {
     if (neighborSetHasOneHop(neighborSet, oneHopNeighbor)) {
