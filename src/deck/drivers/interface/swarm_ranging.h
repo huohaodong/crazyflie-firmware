@@ -20,8 +20,8 @@
   #define SIMULATION_X_BOUND 800 // in cm
   #define SIMULATION_Y_BOUND 800 // in cm
   #define SIMULATION_TICK 1000 // in ms
-  #define SIMULATION_VELOCITY_X 71 // in cm/s
-  #define SIMULATION_VELOCITY_Y 71 // in cm/s
+  #define SIMULATION_VELOCITY_X 14 // in cm/s
+  #define SIMULATION_VELOCITY_Y 14 // in cm/s
   #define SIMULATION_JITTER 15 // in cm
 #endif
 
@@ -32,7 +32,7 @@
 // 14 = 20cm/s
 
 /* Ranging Constants */
-#define RANGING_PERIOD 500 // default in 200ms
+#define RANGING_PERIOD 200 // default in 200ms
 #define RANGING_PERIOD_MIN 50 // default 50ms
 #define RANGING_PERIOD_MAX 500 // default 500ms
 
