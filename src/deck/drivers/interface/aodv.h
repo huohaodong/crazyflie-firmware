@@ -8,7 +8,7 @@
 #define AODV_RX_QUEUE_ITEM_SIZE sizeof (UWB_Packet_t)
 
 /* AODV Message Constants */
-#define AODV_ENABLE_HELLO
+//#define AODV_ENABLE_HELLO
 #define AODV_HELLO_INTERVAL 1000 // default 1 seconds
 #define AODV_DESTINATION_ONLY 0
 #define AODV_GRATUITOUS_REPLY 0

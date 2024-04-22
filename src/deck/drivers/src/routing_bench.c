@@ -141,6 +141,24 @@ static void printTimerCallback(TimerHandle_t timer) {
   }
   DEBUG_PRINT("%u total send = %lu, total recv = %lu, total avg rtt = %.2f, total avg pdr = %.2f.\n\n",
               uwbGetAddress(), totalSendCount, totalRecvCount, totalRTT / count, totalPDR / count);
+  Routing_Table_t *table = getGlobalRoutingTable();
+  DEBUG_PRINT("dest\t next\t hop\t destSeq\t type\t expire\t metric\t validSeq\t valid \t \n");
+  for (int i = 0; i < table->size; i++) {
+    if (table->entries[i].destAddress == UWB_DEST_EMPTY) {
+      continue;
+    }
+    DEBUG_PRINT("%u\t %u\t %u\t %lu\t %d\t %lu\t %.2f\t %d\t %d\t \n",
+                table->entries[i].destAddress,
+                table->entries[i].nextHop,
+                table->entries[i].hopCount,
+                table->entries[i].destSeqNumber,
+                table->entries[i].type,
+                table->entries[i].expirationTime,
+                table->entries[i].metric,
+                table->entries[i].validDestSeqFlag,
+                table->entries[i].valid);
+  }
+  DEBUG_PRINT("---\n");
 }
 
 void routingBenchInit() {

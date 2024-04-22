@@ -476,9 +476,13 @@ static void olsrTcTimerCallback(TimerHandle_t timer) {
 //  printMPRSelectorSet(&mprSelectorSet);
 //  printTopologySet(&topologySet);
 //  printRoutingTable(routingTable);
+#ifdef OLSR_ROUTING_COMPUTATION_USE_HOP
   if (mprSelectorSet.mprSelectors.size > 0) {
     olsrSendTc();
   }
+#else
+  olsrSendTc();
+#endif
   xSemaphoreGive(neighborSet->mu);
   xSemaphoreGive(olsrSetsMutex);
 }

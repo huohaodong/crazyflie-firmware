@@ -18,10 +18,10 @@
 //#define OLSR_ROUTING_COMPUTATION_USE_HOP
 
 /* MPR Selector Set */
-#define OLSR_MPR_SELECTOR_SET_HOLD_TIME (6 * OLSR_TC_INTERVAL)
+#define OLSR_MPR_SELECTOR_SET_HOLD_TIME (24 * OLSR_TC_INTERVAL)
 
 /* Topology Set */
-#define OLSR_TOPOLOGY_SET_HOLD_TIME (6 * OLSR_TC_INTERVAL)
+#define OLSR_TOPOLOGY_SET_HOLD_TIME (24 * OLSR_TC_INTERVAL)
 
 typedef enum {
   OLSR_HELLO_MESSAGE = 1, /* Use Ranging instead of HELLO here, see swarm_ranging.h */
