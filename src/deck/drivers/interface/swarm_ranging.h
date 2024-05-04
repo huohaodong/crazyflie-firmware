@@ -5,13 +5,13 @@
 #include "adhocdeck.h"
 #include "semphr.h"
 
-#define RANGING_DEBUG_ENABLE
+//#define RANGING_DEBUG_ENABLE
 
 /* Function Switch */
 #define ENABLE_BUS_BOARDING_SCHEME
 //#define ENABLE_DYNAMIC_RANGING_PERIOD
 #ifdef ENABLE_DYNAMIC_RANGING_PERIOD
-  #define DYNAMIC_RANGING_COEFFICIENT 1
+#define DYNAMIC_RANGING_COEFFICIENT 1
 #endif
 #define ENABLE_RANGING_STAT
 
@@ -67,6 +67,8 @@ typedef struct {
   float X;
   float Y;
   float Z;
+  uint8_t quad;
+  float angle;
 } __attribute__((packed)) Ranging_Message_Header_t; // 10 byte + 10 byte * MAX_Tr_UNIT
 
 /* Ranging Message */

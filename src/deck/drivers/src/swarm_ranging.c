@@ -69,7 +69,8 @@ float distanceLighthouse[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MA
 float xLighthouse[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
 float yLighthouse[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
 float zLighthouse[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
-float angleLightouse[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
+float angleLighthouse[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = -1};
+uint8_t quad[NEIGHBOR_ADDRESS_MAX + 1] = {[0 ... NEIGHBOR_ADDRESS_MAX] = 0};
 
 #ifdef ENABLE_RANGING_STAT
 uint32_t statTotalSendCount = 0;
@@ -164,11 +165,12 @@ static void statTimerCallback(TimerHandle_t timer) {
   xSemaphoreTake(rangingTableSet.mu, portMAX_DELAY);
   for (int i = 0; i < rangingTableSet.size; i++) {
     UWB_Address_t neighborAddress = rangingTableSet.tables[i].neighborAddress;
-    DEBUG_PRINT("neighbor: %u, distance = %d, lighthouse = %f, angle = %f\n",
+    DEBUG_PRINT("neighbor = %u, distance = %d, lighthouse = %f, angle = %f, quad = %u\n",
                 neighborAddress,
                 distanceTowards[neighborAddress],
                 (double) distanceLighthouse[neighborAddress],
-                (double) angleLightouse[neighborAddress]);
+                (double) angleLighthouse[neighborAddress],
+                quad[neighborAddress]);
   }
   xSemaphoreGive(rangingTableSet.mu);
 }
@@ -1174,7 +1176,8 @@ static void processRangingMessage(Ranging_Message_With_Timestamp_t *rangingMessa
   float positionX = logGetFloat(idPositionX);
   float positionY = logGetFloat(idPositionY);
   float positionZ = logGetFloat(idPositionZ);
-  angleLightouse[neighborAddress] = calculateAngle(positionX, positionY, rangingMessage->header.X, rangingMessage->header.Y);
+  angleLighthouse[neighborAddress] = rangingMessage->header.angle;
+  quad[neighborAddress] = rangingMessage->header.quad;
   Ranging_Table_t *neighborRangingTable = &rangingTableSet.tables[neighborIndex];
   /* Update Re */
   neighborRangingTable->Re.timestamp = rangingMessageWithTimestamp->rxTime;
@@ -1346,6 +1349,17 @@ static Time_t generateRangingMessage(Ranging_Message_t *rangingMessage) {
   rangingMessage->header.X = positionX;
   rangingMessage->header.Y = positionY;
   rangingMessage->header.Y = positionZ;
+  if (positionX > 0 && positionY > 0) {
+    rangingMessage->header.quad = 1;
+  } else if (positionX < 0 && positionY > 0) {
+    rangingMessage->header.quad = 2;
+  } else if (positionX < 0 && positionY < 0) {
+    rangingMessage->header.quad = 3;
+  } else {
+    rangingMessage->header.quad = 4;
+  }
+  rangingMessage->header.angle = atan2f(positionY, positionX) * 180 / M_PI;
+
 
 //  DEBUG_PRINT("generateRangingMessage: ranging message size = %u with %u body units.\n",
 //              rangingMessage->header.msgLength,
